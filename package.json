@@ -1,0 +1,21 @@
+{
+  "name": "ai-paas",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0"
+  },
+  "dependencies": {
+    "@hyperswarm/rpc": "^3.0.0",
+    "hyperdht": "^6.29.1",
+    "hyperswarm": "^4.0.0"
+  }
+}

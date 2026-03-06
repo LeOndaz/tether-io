@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "offset": 0,
+  "schema": [
+    {
+      "name": "apiKeys",
+      "namespace": "aipaas",
+      "id": 0,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [
+        "@aipaas/apiKeys-by-hash"
+      ],
+      "schema": "@aipaas/apiKey",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "deployments",
+      "namespace": "aipaas",
+      "id": 1,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [
+        "@aipaas/deployments-by-model"
+      ],
+      "schema": "@aipaas/deployment",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "usageRecords",
+      "namespace": "aipaas",
+      "id": 2,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [
+        "@aipaas/usageRecords-by-keyId",
+        "@aipaas/usageRecords-by-model"
+      ],
+      "schema": "@aipaas/usageRecord",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "apiKeys-by-hash",
+      "namespace": "aipaas",
+      "id": 3,
+      "type": 2,
+      "version": 1,
+      "collection": "@aipaas/apiKeys",
+      "unique": true,
+      "deprecated": false,
+      "key": [
+        "hash"
+      ]
+    },
+    {
+      "name": "deployments-by-model",
+      "namespace": "aipaas",
+      "id": 4,
+      "type": 2,
+      "version": 1,
+      "collection": "@aipaas/deployments",
+      "unique": false,
+      "deprecated": false,
+      "key": [
+        "model"
+      ]
+    },
+    {
+      "name": "usageRecords-by-keyId",
+      "namespace": "aipaas",
+      "id": 5,
+      "type": 2,
+      "version": 1,
+      "collection": "@aipaas/usageRecords",
+      "unique": false,
+      "deprecated": false,
+      "key": [
+        "keyId"
+      ]
+    },
+    {
+      "name": "usageRecords-by-model",
+      "namespace": "aipaas",
+      "id": 6,
+      "type": 2,
+      "version": 1,
+      "collection": "@aipaas/usageRecords",
+      "unique": false,
+      "deprecated": false,
+      "key": [
+        "model"
+      ]
+    }
+  ]
+}

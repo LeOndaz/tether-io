@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "schema": [
+    {
+      "name": "apiKey",
+      "namespace": "aipaas",
+      "compact": true,
+      "flagsPosition": 4,
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "name",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "hash",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "prefix",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "permissions",
+          "required": false,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "rateLimitRequestsPerMin",
+          "required": false,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "rateLimitTokensPerHour",
+          "required": false,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "lastUsedAt",
+          "required": false,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "createdAt",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "deployment",
+      "namespace": "aipaas",
+      "compact": true,
+      "flagsPosition": 3,
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "model",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "status",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "contextWindow",
+          "required": false,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "temperature",
+          "required": false,
+          "type": "float32",
+          "version": 1
+        },
+        {
+          "name": "maxTokens",
+          "required": false,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "createdAt",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "updatedAt",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "usageRecord",
+      "namespace": "aipaas",
+      "compact": true,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "keyId",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "model",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "inputTokens",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "outputTokens",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "latencyMs",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        },
+        {
+          "name": "timestamp",
+          "required": true,
+          "type": "uint",
+          "version": 1
+        }
+      ]
+    }
+  ]
+}

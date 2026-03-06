@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+.pnpm-debug.log
+coverage/
+.hyperdb/
+.hyperswarm/
+storage/
