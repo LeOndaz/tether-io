@@ -1,0 +1,20 @@
+{
+  "name": "worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "@hyperswarm/rpc": "^3.0.0",
+    "corestore": "^7.0.0",
+    "hypercore": "^11.0.0",
+    "hyperdb": "^6.0.0",
+    "hyperdht": "^6.29.1",
+    "hyperswarm": "^4.0.0",
+    "ollama": "^0.5.0"
+  }
+}
