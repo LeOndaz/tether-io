@@ -1,0 +1,9 @@
+{
+  "name": "dht-bootstrap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hyperdht": "^6.29.1"
+  }
+}

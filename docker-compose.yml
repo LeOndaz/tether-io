@@ -1,0 +1,80 @@
+services:
+  dht-bootstrap:
+    build: ./dht-bootstrap
+    environment:
+      - DHT_PORT=49737
+      - DHT_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  gateway:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=info
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - MODEL_RUNTIME=ollama
+      - CLUSTER_TOPIC=ai-paas-cluster-v1
+      - DHT_BOOTSTRAP=dht-bootstrap:49737
+      - RATE_LIMIT_REQUESTS_PER_MIN=60
+      - RATE_LIMIT_TOKENS_PER_HOUR=100000
+    volumes:
+      - gateway_storage:/app/storage
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+
+  worker-1:
+    build: ./worker
+    environment:
+      - WORKER_ID=worker-1
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - MODEL_RUNTIME=ollama
+      - CLUSTER_TOPIC=ai-paas-cluster-v1
+      - DHT_BOOTSTRAP=dht-bootstrap:49737
+      - GATEWAY_URL=http://gateway:3000
+      - LOG_LEVEL=info
+    volumes:
+      - worker1_storage:/app/storage
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+
+  worker-2:
+    build: ./worker
+    environment:
+      - WORKER_ID=worker-2
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - MODEL_RUNTIME=ollama
+      - CLUSTER_TOPIC=ai-paas-cluster-v1
+      - DHT_BOOTSTRAP=dht-bootstrap:49737
+      - GATEWAY_URL=http://gateway:3000
+      - LOG_LEVEL=info
+    volumes:
+      - worker2_storage:/app/storage
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+
+volumes:
+  gateway_storage:
+  worker1_storage:
+  worker2_storage:
