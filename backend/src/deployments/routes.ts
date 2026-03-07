@@ -1,38 +1,61 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { NotFoundError, ValidationError } from '../shared/errors.js'
-import type { DeploymentService } from './service.js'
+import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { Static } from 'typebox'
+import { Type } from 'typebox'
+import { NotFoundError, ValidationError } from '../shared/errors'
+import type { DeploymentService } from './service'
+
+const CreateDeploymentBody = Type.Object(
+  {
+    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:\\-/]{1,128}$' }),
+    verbose: Type.Optional(Type.Boolean({ default: false })),
+    contextWindow: Type.Optional(Type.Integer({ minimum: 512 })),
+    temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
+    maxTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+  },
+  { additionalProperties: false },
+)
+
+const UpdateDeploymentBody = Type.Object(
+  {
+    contextWindow: Type.Optional(Type.Integer({ minimum: 512 })),
+    temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
+    maxTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+  },
+  { additionalProperties: false },
+)
+
+const DeploymentResponse = Type.Object({
+  id: Type.String(),
+  model: Type.String(),
+  status: Type.String(),
+  verbose: Type.Boolean(),
+  contextWindow: Type.Integer(),
+  temperature: Type.Number(),
+  maxTokens: Type.Integer(),
+  createdAt: Type.Number(),
+  updatedAt: Type.Number(),
+})
+
+const IdParams = Type.Object({
+  id: Type.String(),
+})
 
 export function createDeploymentRoutes(
   deploymentService: DeploymentService,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
-    fastify.post(
+    fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
       '/api/deployments',
       {
         schema: {
           tags: ['Deployments'],
           description: 'Deploy a model to worker nodes',
-          body: {
-            type: 'object',
-            required: ['model'],
-            properties: {
-              model: { type: 'string', minLength: 1 },
-              contextWindow: { type: 'integer', minimum: 512 },
-              temperature: { type: 'number', minimum: 0, maximum: 2 },
-              maxTokens: { type: 'integer', minimum: 1 },
-            },
-          },
+          body: CreateDeploymentBody,
+          response: { 201: DeploymentResponse },
         },
       },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        const deployment = await deploymentService.create(
-          request.body as {
-            model: string
-            contextWindow?: number
-            temperature?: number
-            maxTokens?: number
-          },
-        )
+      async (request, reply: FastifyReply) => {
+        const deployment = await deploymentService.create(request.body)
         reply.status(201)
         return deployment
       },
@@ -44,6 +67,7 @@ export function createDeploymentRoutes(
         schema: {
           tags: ['Deployments'],
           description: 'List all deployments',
+          response: { 200: Type.Array(DeploymentResponse) },
         },
       },
       async () => {
@@ -51,92 +75,72 @@ export function createDeploymentRoutes(
       },
     )
 
-    fastify.get(
+    fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id',
       {
         schema: {
           tags: ['Deployments'],
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
+          params: IdParams,
+          response: { 200: DeploymentResponse },
         },
       },
-      async (request: FastifyRequest) => {
-        const { id } = request.params as { id: string }
+      async (request) => {
+        const { id } = request.params
         const deployment = await deploymentService.getById(id)
-        if (!deployment) throw new NotFoundError('Deployment')
+        if (!deployment) throw new NotFoundError('Deployment not found')
         return deployment
       },
     )
 
-    fastify.patch(
+    fastify.patch<{ Params: Static<typeof IdParams>; Body: Static<typeof UpdateDeploymentBody> }>(
       '/api/deployments/:id',
       {
         schema: {
           tags: ['Deployments'],
           description: 'Update deployment configuration',
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
-          body: {
-            type: 'object',
-            properties: {
-              contextWindow: { type: 'integer', minimum: 512 },
-              temperature: { type: 'number', minimum: 0, maximum: 2 },
-              maxTokens: { type: 'integer', minimum: 1 },
-            },
-          },
+          params: IdParams,
+          body: UpdateDeploymentBody,
+          response: { 200: DeploymentResponse },
         },
       },
-      async (request: FastifyRequest) => {
-        const { id } = request.params as { id: string }
-        const updated = await deploymentService.update(
-          id,
-          request.body as {
-            contextWindow?: number
-            temperature?: number
-            maxTokens?: number
-          },
-        )
-        if (!updated) throw new NotFoundError('Deployment')
+      async (request) => {
+        const { id } = request.params
+        const updated = await deploymentService.update(id, request.body)
+        if (!updated) throw new NotFoundError('Deployment not found')
         return updated
       },
     )
 
-    fastify.delete(
+    fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id',
       {
         schema: {
           tags: ['Deployments'],
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
+          description: 'Delete a deployment',
+          params: IdParams,
+          response: { 204: Type.Null() },
         },
       },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        const { id } = request.params as { id: string }
+      async (request, reply: FastifyReply) => {
+        const { id } = request.params
         const deleted = await deploymentService.remove(id)
-        if (!deleted) throw new NotFoundError('Deployment')
-        reply.status(204)
+        if (!deleted) throw new NotFoundError('Deployment not found')
+        return reply.status(204).send()
       },
     )
 
-    fastify.post(
+    fastify.post<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id/cancel',
       {
         schema: {
           tags: ['Deployments'],
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
+          description: 'Cancel an in-progress deployment',
+          params: IdParams,
+          response: { 200: Type.Object({ status: Type.String() }) },
         },
       },
-      async (request: FastifyRequest) => {
-        const { id } = request.params as { id: string }
+      async (request) => {
+        const { id } = request.params
         const cancelled = await deploymentService.cancel(id)
         if (!cancelled) {
           throw new ValidationError('Deployment cannot be cancelled in its current state')
@@ -145,40 +149,58 @@ export function createDeploymentRoutes(
       },
     )
 
-    // SSE endpoint for deployment logs
-    fastify.get(
+    fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id/logs',
       {
         schema: {
           tags: ['Deployments'],
           description: 'Stream deployment logs via SSE',
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
+          params: IdParams,
         },
+        sse: true,
       },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        const { id } = request.params as { id: string }
+      async (request, reply) => {
+        const { id } = request.params
         const deployment = await deploymentService.getById(id)
-        if (!deployment) throw new NotFoundError('Deployment')
+        if (!deployment) throw new NotFoundError('Deployment not found')
 
-        reply.raw.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
+        await reply.sse.send({
+          data: {
+            type: 'status',
+            message: `Current status: ${deployment.status}`,
+            timestamp: Date.now(),
+          },
         })
 
-        // Send current status immediately
-        reply.raw.write(
-          `data: ${JSON.stringify({ type: 'status', message: `Current status: ${deployment.status}`, timestamp: Date.now() })}\n\n`,
-        )
+        // Terminal states — send status and close
+        if (deployment.status === 'ready' || deployment.status === 'failed') {
+          reply.sse.close()
+          return
+        }
 
+        reply.sse.keepAlive()
+
+        // Serialize writes to prevent interleaved SSE frames and respect backpressure
+        let sendQueue: Promise<void> = Promise.resolve()
         const unsubscribe = deploymentService.subscribeLogs(id, (event) => {
-          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+          if (!reply.sse.isConnected) return
+          sendQueue = sendQueue.then(async () => {
+            if (!reply.sse.isConnected) return
+            try {
+              await reply.sse.send({ data: event })
+            } catch {
+              // Connection closed between isConnected check and send
+              unsubscribe()
+              return
+            }
+            if (event.message === 'Model deployed successfully' || event.type === 'error') {
+              unsubscribe()
+              reply.sse.close()
+            }
+          })
         })
 
-        request.raw.on('close', () => {
+        reply.sse.onClose(() => {
           unsubscribe()
         })
       },

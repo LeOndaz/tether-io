@@ -1,4 +1,4 @@
-import type { LBStrategy, WorkerInfo } from '../dispatcher.js'
+import type { LBStrategy, WorkerInfo } from '../dispatcher'
 
 export class ModelAffinityStrategy implements LBStrategy {
   select(workers: WorkerInfo[], request: unknown): WorkerInfo | null {

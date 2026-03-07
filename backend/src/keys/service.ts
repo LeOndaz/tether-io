@@ -1,16 +1,6 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import { COLLECTIONS, INDEXES } from '../db/index.js'
-
-const BASE62_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-
-function base62Encode(buffer: Buffer): string {
-  let result = ''
-  for (const byte of buffer) {
-    result += BASE62_CHARS[byte % 62]
-  }
-  return result
-}
+import { KEYS_BY_HASH_INDEX, KEYS_COLLECTION } from './schema'
 
 function hashKey(apiKey: string): string {
   return crypto.createHash('sha256').update(apiKey).digest('hex')
@@ -23,6 +13,9 @@ export interface GenerateKeyParams {
   rateLimitTokensPerHour?: number
 }
 
+/** sk- (3 chars) + 8 chars of the random suffix = visible prefix for display */
+const KEY_PREFIX_LENGTH = 11
+
 export interface ApiKeyRecord {
   id: string
   name: string
@@ -31,76 +24,75 @@ export interface ApiKeyRecord {
   permissions: string
   rateLimitRequestsPerMin: number
   rateLimitTokensPerHour: number
-  lastUsedAt: number
+  lastUsedAt: number | null
   createdAt: number
 }
 
-export interface KeyService {
-  generate(params: GenerateKeyParams): Promise<ApiKeyRecord & { key: string }>
-  validateKey(apiKey: string): Promise<ApiKeyRecord | null>
-  getById(id: string): Promise<ApiKeyRecord | null>
-  list(): Promise<ApiKeyRecord[]>
-  deleteKey(id: string): Promise<void>
-}
+const ONE_MINUTE_MS = 60_000
 
-export function createKeyService(db: HyperDB): KeyService {
-  return {
-    async generate({ name, permissions, rateLimitRequestsPerMin, rateLimitTokensPerHour }) {
-      const raw = crypto.randomBytes(32)
-      const apiKey = `sk-${base62Encode(raw)}`
-      const hash = hashKey(apiKey)
-      const prefix = apiKey.slice(0, 11)
-      const id = crypto.randomUUID()
+export class KeyService {
+  constructor(private db: HyperDB) {}
 
-      const record: ApiKeyRecord = {
-        id,
-        name,
-        hash,
-        prefix,
-        permissions: permissions || 'inference',
-        rateLimitRequestsPerMin: rateLimitRequestsPerMin || 60,
-        rateLimitTokensPerHour: rateLimitTokensPerHour || 100000,
-        lastUsedAt: 0,
-        createdAt: Date.now(),
-      }
+  async generate({
+    name,
+    permissions,
+    rateLimitRequestsPerMin,
+    rateLimitTokensPerHour,
+  }: GenerateKeyParams): Promise<ApiKeyRecord & { key: string }> {
+    const apiKey = `sk-${crypto.randomBytes(32).toString('base64url')}`
+    const hash = hashKey(apiKey)
+    const prefix = apiKey.slice(0, KEY_PREFIX_LENGTH)
+    const id = crypto.randomUUID()
 
-      await db.insert(COLLECTIONS.API_KEYS, record as unknown as Record<string, unknown>)
-      await db.flush()
+    const record: ApiKeyRecord = {
+      id,
+      name,
+      hash,
+      prefix,
+      permissions: permissions ?? 'inference',
+      rateLimitRequestsPerMin: rateLimitRequestsPerMin ?? 60,
+      rateLimitTokensPerHour: rateLimitTokensPerHour ?? 100000,
+      lastUsedAt: null,
+      createdAt: Date.now(),
+    }
 
-      // Return full key only once (view-once pattern)
-      return { ...record, key: apiKey }
-    },
+    await this.db.insert(KEYS_COLLECTION, record as unknown as Record<string, unknown>)
+    await this.db.flush()
 
-    async validateKey(apiKey) {
-      const hash = hashKey(apiKey)
-      const record = (await db.findOne(INDEXES.API_KEYS_BY_HASH, {
-        gte: { hash },
-        lte: { hash },
-      })) as ApiKeyRecord | null
-      if (!record) return null
+    return { ...record, key: apiKey }
+  }
 
-      // Update last used timestamp
-      await db.insert(COLLECTIONS.API_KEYS, {
+  /** Validates key by hash lookup. Throttles lastUsedAt writes to at most once per minute. */
+  async validateKey(apiKey: string): Promise<ApiKeyRecord | null> {
+    const hash = hashKey(apiKey)
+    const record = (await this.db.findOne(KEYS_BY_HASH_INDEX, {
+      gte: { hash },
+      lte: { hash },
+    })) as ApiKeyRecord | null
+    if (!record) return null
+
+    if (record.lastUsedAt === null || Date.now() - record.lastUsedAt > ONE_MINUTE_MS) {
+      await this.db.insert(KEYS_COLLECTION, {
         ...record,
         lastUsedAt: Date.now(),
       } as unknown as Record<string, unknown>)
-      await db.flush()
+      await this.db.flush()
+    }
 
-      return record
-    },
+    return record
+  }
 
-    async getById(id) {
-      return db.get(COLLECTIONS.API_KEYS, { id }) as Promise<ApiKeyRecord | null>
-    },
+  async getById(id: string): Promise<ApiKeyRecord | null> {
+    return this.db.get(KEYS_COLLECTION, { id }) as Promise<ApiKeyRecord | null>
+  }
 
-    async list() {
-      const stream = db.find(COLLECTIONS.API_KEYS, {})
-      return stream.toArray() as Promise<ApiKeyRecord[]>
-    },
+  async list(): Promise<ApiKeyRecord[]> {
+    const stream = this.db.find(KEYS_COLLECTION, {})
+    return stream.toArray() as Promise<ApiKeyRecord[]>
+  }
 
-    async deleteKey(id) {
-      await db.delete(COLLECTIONS.API_KEYS, { id })
-      await db.flush()
-    },
+  async deleteKey(id: string): Promise<void> {
+    await this.db.delete(KEYS_COLLECTION, { id })
+    await this.db.flush()
   }
 }

@@ -1,12 +1,17 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import { COLLECTIONS, INDEXES } from '../db/index.js'
-import type { Dispatcher } from '../workers/dispatcher.js'
+import type pino from 'pino'
+import { ValidationError } from '../shared/errors'
+import type { Dispatcher } from '../workers/dispatcher'
+import { DEPLOYMENTS_BY_MODEL_INDEX, DEPLOYMENTS_COLLECTION } from './schema'
+
+export type DeploymentStatus = 'pending' | 'pulling' | 'ready' | 'failed' | 'removing'
 
 export interface DeploymentRecord {
   id: string
   model: string
-  status: string
+  status: DeploymentStatus
+  verbose: boolean
   contextWindow: number
   temperature: number
   maxTokens: number
@@ -16,6 +21,13 @@ export interface DeploymentRecord {
 
 export interface CreateDeploymentParams {
   model: string
+  verbose?: boolean
+  contextWindow?: number
+  temperature?: number
+  maxTokens?: number
+}
+
+export interface UpdateDeploymentParams {
   contextWindow?: number
   temperature?: number
   maxTokens?: number
@@ -29,23 +41,226 @@ export interface LogEvent {
 
 type LogCallback = (event: LogEvent) => void
 
-export interface DeploymentService {
-  create(params: CreateDeploymentParams): Promise<DeploymentRecord>
-  getById(id: string): Promise<DeploymentRecord | null>
-  list(): Promise<DeploymentRecord[]>
-  update(id: string, updates: Partial<CreateDeploymentParams>): Promise<DeploymentRecord | null>
-  remove(id: string): Promise<boolean>
-  cancel(id: string): Promise<boolean>
-  subscribeLogs(deploymentId: string, callback: LogCallback): () => void
-  getByModel(model: string): Promise<DeploymentRecord[]>
-}
+const MAX_LOG_BUFFER_SIZE = 200
+const LOG_BUFFER_CLEANUP_DELAY_MS = 5 * 60 * 1000
 
-export function createDeploymentService(db: HyperDB, dispatcher: Dispatcher): DeploymentService {
-  // Active SSE connections for deployment log streaming
-  const logStreams = new Map<string, Set<LogCallback>>()
+export class DeploymentService {
+  private logStreams = new Map<string, Set<LogCallback>>()
+  private logBuffers = new Map<string, LogEvent[]>()
+  private cancelledDeployments = new Set<string>()
+  private createLocks = new Map<string, Promise<void>>()
+  private cleanupTimers = new Map<string, NodeJS.Timeout>()
 
-  function emitLog(deploymentId: string, event: LogEvent): void {
-    const listeners = logStreams.get(deploymentId)
+  constructor(
+    private db: HyperDB,
+    private dispatcher: Dispatcher,
+    private logger: pino.Logger,
+  ) {}
+
+  /**
+   * Serializes concurrent creates for the same model to prevent duplicate deployments (TOCTOU).
+   *
+   * Chains onto any in-flight create for this model so the duplicate check in
+   * createDeploymentRecord runs only after the previous one completes.
+   */
+  async create(params: CreateDeploymentParams): Promise<DeploymentRecord> {
+    const existing = this.createLocks.get(params.model)
+    const operation = (existing ?? Promise.resolve()).then(() =>
+      this.createDeploymentRecord(params),
+    )
+    const settled = operation.then(
+      () => {},
+      () => {},
+    )
+    this.createLocks.set(params.model, settled)
+    // Clean up lock once no further creates are chained
+    settled.then(() => {
+      if (this.createLocks.get(params.model) === settled) {
+        this.createLocks.delete(params.model)
+      }
+    })
+    return operation
+  }
+
+  private async createDeploymentRecord({
+    model,
+    verbose,
+    contextWindow,
+    temperature,
+    maxTokens,
+  }: CreateDeploymentParams): Promise<DeploymentRecord> {
+    const indexed = await this.getByModel(model)
+
+    // Index results may include phantom records (see getByModel comment), so verify
+    // each via primary key lookup. Also auto-fail deployments stuck in pending/pulling
+    // after a gateway restart — no active pull process exists for them anymore.
+    const STUCK_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes
+    const checkTime = Date.now()
+    const existing: DeploymentRecord[] = []
+
+    for (const d of indexed) {
+      const verified = await this.getById(d.id)
+      if (!verified) continue
+
+      const isInFlight = verified.status === 'pending' || verified.status === 'pulling'
+      const isStuck = isInFlight && checkTime - verified.updatedAt > STUCK_THRESHOLD_MS
+
+      if (isStuck) {
+        this.logger.warn(
+          { deploymentId: verified.id, status: verified.status, updatedAt: verified.updatedAt },
+          'auto-failing stuck deployment',
+        )
+        await this.updateStatus(verified.id, 'failed')
+        continue
+      }
+
+      existing.push(verified)
+    }
+
+    const activeExists = existing.some((d) => d.status !== 'failed' && d.status !== 'removing')
+    if (activeExists) {
+      throw new ValidationError(`An active deployment for model "${model}" already exists`)
+    }
+
+    const id = crypto.randomUUID()
+    const now = Date.now()
+
+    const deployment: DeploymentRecord = {
+      id,
+      model,
+      status: 'pending',
+      verbose: verbose ?? false,
+      contextWindow: contextWindow ?? 4096,
+      temperature: temperature ?? 0.7,
+      maxTokens: maxTokens ?? 2048,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    await this.db.insert(DEPLOYMENTS_COLLECTION, deployment as unknown as Record<string, unknown>)
+    await this.db.flush()
+
+    this.pullModel(id, model, deployment.verbose).catch((err) => {
+      this.logger.error({ err, deploymentId: id }, 'unexpected pullModel error')
+    })
+
+    return deployment
+  }
+
+  async getById(id: string): Promise<DeploymentRecord | null> {
+    return this.db.get(DEPLOYMENTS_COLLECTION, { id }) as Promise<DeploymentRecord | null>
+  }
+
+  async list(): Promise<DeploymentRecord[]> {
+    const stream = this.db.find(DEPLOYMENTS_COLLECTION, {})
+    return stream.toArray() as Promise<DeploymentRecord[]>
+  }
+
+  async update(id: string, updates: UpdateDeploymentParams): Promise<DeploymentRecord | null> {
+    const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
+    if (!existing) return null
+
+    const updated: DeploymentRecord = {
+      ...existing,
+      contextWindow: updates.contextWindow ?? existing.contextWindow,
+      temperature: updates.temperature ?? existing.temperature,
+      maxTokens: updates.maxTokens ?? existing.maxTokens,
+      updatedAt: Date.now(),
+    }
+
+    await this.db.insert(DEPLOYMENTS_COLLECTION, updated as unknown as Record<string, unknown>)
+    await this.db.flush()
+    return updated
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
+    if (!existing) return false
+
+    await this.updateStatus(id, 'removing')
+
+    const otherDeployments = await this.getByModel(existing.model)
+    const hasOtherActive = otherDeployments.some(
+      (d) => d.id !== id && d.status !== 'failed' && d.status !== 'removing',
+    )
+
+    if (!hasOtherActive) {
+      try {
+        await this.dispatcher.broadcast('model.delete', { model: existing.model })
+      } catch (err) {
+        this.logger.warn(
+          { err, model: existing.model },
+          'model delete broadcast failed — worker might be down',
+        )
+      }
+    }
+
+    this.cancelledDeployments.add(id)
+    await this.db.delete(DEPLOYMENTS_COLLECTION, { id })
+    await this.db.flush()
+    this.cleanupBuffers(id)
+    // If no pull was in-flight, the flag is orphaned — clean up after a delay
+    setTimeout(() => this.cancelledDeployments.delete(id), 60_000).unref()
+    return true
+  }
+
+  async cancel(id: string): Promise<boolean> {
+    const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
+    if (!existing) return false
+    if (existing.status !== 'pending' && existing.status !== 'pulling') return false
+
+    this.cancelledDeployments.add(id)
+    await this.updateStatus(id, 'failed')
+    this.emitLog(id, { type: 'status', message: 'Deployment cancelled', timestamp: Date.now() })
+    this.cleanupBuffers(id)
+    return true
+  }
+
+  /** Subscribes to live log events. Replays buffered events to the new subscriber immediately. */
+  subscribeLogs(deploymentId: string, callback: LogCallback): () => void {
+    if (!this.logStreams.has(deploymentId)) {
+      this.logStreams.set(deploymentId, new Set())
+    }
+    const listeners = this.logStreams.get(deploymentId)
+    if (!listeners) return () => {}
+    listeners.add(callback)
+
+    const buffered = this.logBuffers.get(deploymentId)
+    if (buffered) {
+      for (const event of buffered) {
+        callback(event)
+      }
+    }
+
+    return () => {
+      const current = this.logStreams.get(deploymentId)
+      if (current) {
+        current.delete(callback)
+        if (current.size === 0) this.logStreams.delete(deploymentId)
+      }
+    }
+  }
+
+  async getByModel(model: string): Promise<DeploymentRecord[]> {
+    const stream = this.db.find(DEPLOYMENTS_BY_MODEL_INDEX, { model })
+    const results = (await stream.toArray()) as DeploymentRecord[]
+    // HyperDB's append-only index can map deleted keys to reused slots, returning records
+    // for a different model. Filter to exact match to avoid false duplicate-deploy blocks.
+    return results.filter((d) => d.model === model)
+  }
+
+  private emitLog(deploymentId: string, event: LogEvent): void {
+    if (!this.logBuffers.has(deploymentId)) {
+      this.logBuffers.set(deploymentId, [])
+    }
+    const buffer = this.logBuffers.get(deploymentId)
+    if (!buffer) return
+    buffer.push(event)
+    if (buffer.length > MAX_LOG_BUFFER_SIZE) {
+      buffer.splice(0, buffer.length - MAX_LOG_BUFFER_SIZE)
+    }
+
+    const listeners = this.logStreams.get(deploymentId)
     if (listeners) {
       for (const cb of listeners) {
         cb(event)
@@ -53,160 +268,234 @@ export function createDeploymentService(db: HyperDB, dispatcher: Dispatcher): De
     }
   }
 
-  const service: DeploymentService = {
-    async create({ model, contextWindow, temperature, maxTokens }) {
-      const id = crypto.randomUUID()
-      const now = Date.now()
+  private cleanupBuffers(deploymentId: string): void {
+    const existing = this.cleanupTimers.get(deploymentId)
+    if (existing) clearTimeout(existing)
 
-      const deployment: DeploymentRecord = {
-        id,
-        model,
-        status: 'pending',
-        contextWindow: contextWindow || 4096,
-        temperature: temperature || 0.7,
-        maxTokens: maxTokens || 2048,
-        createdAt: now,
-        updatedAt: now,
-      }
-
-      await db.insert(COLLECTIONS.DEPLOYMENTS, deployment as unknown as Record<string, unknown>)
-      await db.flush()
-
-      // Trigger async model pull on workers
-      pullModel(id, model)
-
-      return deployment
-    },
-
-    async getById(id) {
-      return db.get(COLLECTIONS.DEPLOYMENTS, { id }) as Promise<DeploymentRecord | null>
-    },
-
-    async list() {
-      const stream = db.find(COLLECTIONS.DEPLOYMENTS, {})
-      return stream.toArray() as Promise<DeploymentRecord[]>
-    },
-
-    async update(id, updates) {
-      const existing = (await db.get(COLLECTIONS.DEPLOYMENTS, { id })) as DeploymentRecord | null
-      if (!existing) return null
-
-      const updated = {
-        ...existing,
-        ...updates,
-        id, // Ensure ID is not overwritten
-        updatedAt: Date.now(),
-      }
-
-      await db.insert(COLLECTIONS.DEPLOYMENTS, updated as unknown as Record<string, unknown>)
-      await db.flush()
-      return updated
-    },
-
-    async remove(id) {
-      const existing = (await db.get(COLLECTIONS.DEPLOYMENTS, { id })) as DeploymentRecord | null
-      if (!existing) return false
-
-      await updateStatus(id, 'removing')
-
-      // Tell workers to delete the model
-      try {
-        await dispatcher.broadcast('model.delete', { model: existing.model })
-      } catch {
-        // Best effort — worker might be down
-      }
-
-      await db.delete(COLLECTIONS.DEPLOYMENTS, { id })
-      await db.flush()
-      return true
-    },
-
-    async cancel(id) {
-      const existing = (await db.get(COLLECTIONS.DEPLOYMENTS, { id })) as DeploymentRecord | null
-      if (!existing) return false
-      if (existing.status !== 'pending' && existing.status !== 'pulling') return false
-
-      await updateStatus(id, 'failed')
-      emitLog(id, { type: 'status', message: 'Deployment cancelled', timestamp: Date.now() })
-      return true
-    },
-
-    subscribeLogs(deploymentId, callback) {
-      if (!logStreams.has(deploymentId)) {
-        logStreams.set(deploymentId, new Set())
-      }
-      const listeners = logStreams.get(deploymentId) as Set<LogCallback>
-      listeners.add(callback)
-      return () => {
-        const listeners = logStreams.get(deploymentId)
-        if (listeners) {
-          listeners.delete(callback)
-          if (listeners.size === 0) logStreams.delete(deploymentId)
-        }
-      }
-    },
-
-    async getByModel(model) {
-      const stream = db.find(INDEXES.DEPLOYMENTS_BY_MODEL, { model })
-      return stream.toArray() as Promise<DeploymentRecord[]>
-    },
+    const timer = setTimeout(() => {
+      this.logBuffers.delete(deploymentId)
+      this.cleanupTimers.delete(deploymentId)
+    }, LOG_BUFFER_CLEANUP_DELAY_MS)
+    timer.unref()
+    this.cleanupTimers.set(deploymentId, timer)
   }
 
-  async function pullModel(deploymentId: string, model: string): Promise<void> {
+  private clearAllTimers(): void {
+    for (const timer of this.cleanupTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.cleanupTimers.clear()
+  }
+
+  destroy(): void {
+    this.clearAllTimers()
+  }
+
+  /** Waits for at least one healthy worker, retrying briefly for discovery to complete. */
+  private async waitForWorkers(deploymentId: string, maxWaitMs = 30_000): Promise<boolean> {
+    const interval = 2_000
+    let elapsed = 0
+    while (elapsed < maxWaitMs) {
+      if (this.cancelledDeployments.has(deploymentId)) return false
+      const workers = this.dispatcher.getWorkers()
+      if (workers.some((w) => w.healthy)) return true
+      this.emitLog(deploymentId, {
+        type: 'status',
+        message: 'Waiting for workers to become available...',
+        timestamp: Date.now(),
+      })
+      await new Promise((r) => setTimeout(r, interval))
+      elapsed += interval
+    }
+    return false
+  }
+
+  /** Fail any pending/pulling deployments left over from a previous gateway process. */
+  async recoverStuckDeployments(): Promise<void> {
+    const all = await this.list()
+    for (const d of all) {
+      if (d.status === 'pending' || d.status === 'pulling') {
+        this.logger.warn(
+          { deploymentId: d.id, model: d.model, status: d.status },
+          'failing orphaned deployment on startup',
+        )
+        await this.updateStatus(d.id, 'failed')
+      }
+    }
+  }
+
+  private async pullModel(deploymentId: string, model: string, verbose: boolean): Promise<void> {
     try {
-      await updateStatus(deploymentId, 'pulling')
-      emitLog(deploymentId, {
+      if (this.cancelledDeployments.has(deploymentId)) return
+
+      // Wait for at least one worker to be available (handles startup race with discovery)
+      const hasWorkers = await this.waitForWorkers(deploymentId)
+      if (!hasWorkers) {
+        await this.updateStatus(deploymentId, 'failed')
+        this.emitLog(deploymentId, {
+          type: 'error',
+          message: 'No workers available — timed out waiting for worker discovery',
+          timestamp: Date.now(),
+        })
+        return
+      }
+
+      await this.updateStatus(deploymentId, 'pulling')
+      this.emitLog(deploymentId, {
         type: 'status',
         message: 'Starting model pull...',
         timestamp: Date.now(),
       })
 
-      const results = await dispatcher.broadcast('model.pull', { model })
+      // Always use HTTP streaming for pulls — RPC channels time out on large models.
+      // The `verbose` flag controls whether per-layer progress events are emitted to logs.
+      const anySuccess = await this.pullModelStreaming(deploymentId, model, verbose)
 
-      const anySuccess = results.some((r) => r.status === 'fulfilled')
+      if (this.cancelledDeployments.has(deploymentId)) return
+
       if (anySuccess) {
-        await updateStatus(deploymentId, 'ready')
-        emitLog(deploymentId, {
+        if (this.cancelledDeployments.has(deploymentId)) return
+        await this.updateStatus(deploymentId, 'ready')
+        this.syncWorkerModels().catch((err) => {
+          this.logger.warn({ err }, 'syncWorkerModels failed after successful deployment')
+        })
+        this.emitLog(deploymentId, {
           type: 'status',
           message: 'Model deployed successfully',
           timestamp: Date.now(),
         })
       } else {
-        const reasons = results
-          .map((r) => {
-            if (r.status === 'rejected') {
-              return (r.reason as Error)?.message || String(r.reason) || 'unknown'
-            }
-            return 'unknown'
-          })
-          .join('; ')
-        console.error(`[deployment] all workers failed: ${reasons}`)
-        await updateStatus(deploymentId, 'failed')
-        emitLog(deploymentId, {
+        await this.updateStatus(deploymentId, 'failed')
+        this.emitLog(deploymentId, {
           type: 'error',
-          message: `All workers failed: ${reasons}`,
+          message: 'All workers failed model pull',
           timestamp: Date.now(),
         })
       }
     } catch (err) {
+      if (this.cancelledDeployments.has(deploymentId)) return
       const message = err instanceof Error ? err.message : String(err)
-      console.error(`[deployment] pull error: ${message}`)
-      await updateStatus(deploymentId, 'failed')
-      emitLog(deploymentId, { type: 'error', message, timestamp: Date.now() })
+      this.logger.error({ err, deploymentId }, 'pull error')
+      await this.updateStatus(deploymentId, 'failed')
+      this.emitLog(deploymentId, { type: 'error', message, timestamp: Date.now() })
+    } finally {
+      this.cancelledDeployments.delete(deploymentId)
+      this.cleanupBuffers(deploymentId)
     }
   }
 
-  async function updateStatus(id: string, status: string): Promise<void> {
-    const existing = (await db.get(COLLECTIONS.DEPLOYMENTS, { id })) as DeploymentRecord | null
-    if (existing) {
-      await db.insert(COLLECTIONS.DEPLOYMENTS, {
-        ...existing,
-        status,
-        updatedAt: Date.now(),
-      } as unknown as Record<string, unknown>)
-      await db.flush()
+  /**
+   * Pulls model via workers' HTTP stream endpoints (not RPC — avoids channel timeouts).
+   * When verbose=true, per-layer progress events are emitted to deployment logs.
+   */
+  private async pullModelStreaming(
+    deploymentId: string,
+    model: string,
+    verbose: boolean,
+  ): Promise<boolean> {
+    const workers = this.dispatcher.getWorkers().filter((w) => w.healthy && w.streamUrl)
+    if (workers.length === 0) return false
+
+    const results = await Promise.allSettled(
+      workers.map(async (worker) => {
+        this.emitLog(deploymentId, {
+          type: 'status',
+          message: `Pulling on ${worker.workerId}...`,
+          timestamp: Date.now(),
+        })
+
+        const response = await fetch(`${worker.streamUrl}/stream/pull`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify({ model }),
+        })
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Worker ${worker.workerId} stream pull failed: ${response.status}`)
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let lineBuf = ''
+
+        while (true) {
+          if (this.cancelledDeployments.has(deploymentId)) {
+            reader.cancel().catch(() => {})
+            return
+          }
+          const { done, value } = await reader.read()
+          if (done) break
+
+          if (!verbose) continue
+
+          lineBuf += decoder.decode(value, { stream: true })
+          const lines = lineBuf.split('\n')
+          lineBuf = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ') || line === 'data: [DONE]') continue
+            try {
+              const event = JSON.parse(line.slice(6)) as {
+                type: string
+                status?: string
+                total?: number
+                completed?: number
+                message?: string
+              }
+              if (event.type === 'pull_progress' && event.status) {
+                const pct =
+                  event.total && event.completed
+                    ? ` (${Math.round((event.completed / event.total) * 100)}%)`
+                    : ''
+                this.emitLog(deploymentId, {
+                  type: 'progress',
+                  message: `[${worker.workerId}] ${event.status}${pct}`,
+                  timestamp: Date.now(),
+                })
+              } else if (event.type === 'error') {
+                throw new Error(event.message ?? 'unknown worker error')
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== 'unknown worker error') {
+                // Skip unparseable SSE lines
+              } else {
+                throw parseErr
+              }
+            }
+          }
+        }
+      }),
+    )
+
+    return results.some((r) => r.status === 'fulfilled')
+  }
+
+  private async syncWorkerModels(): Promise<void> {
+    const workers = this.dispatcher.getWorkers()
+    for (const worker of workers) {
+      try {
+        const result = (await this.dispatcher.requestToWorker(
+          Buffer.from(worker.publicKey, 'hex'),
+          'model.list',
+          {},
+        )) as Array<{ name: string }>
+        const models = result.map((m) => m.name)
+        this.dispatcher.updateWorkerModels(worker.publicKey, models)
+      } catch (err) {
+        this.logger.warn({ err, workerKey: worker.publicKey }, 'failed to list models from worker')
+      }
     }
   }
 
-  return service
+  private async updateStatus(id: string, status: DeploymentStatus): Promise<void> {
+    const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
+    if (!existing) return
+
+    await this.db.insert(DEPLOYMENTS_COLLECTION, {
+      ...existing,
+      status,
+      updatedAt: Date.now(),
+    } as unknown as Record<string, unknown>)
+    await this.db.flush()
+  }
 }

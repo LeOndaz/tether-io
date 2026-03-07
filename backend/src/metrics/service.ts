@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import { COLLECTIONS, INDEXES } from '../db/index.js'
+import { USAGE_BY_KEY_ID_INDEX, USAGE_BY_MODEL_INDEX, USAGE_RECORDS_COLLECTION } from './schema'
 
 export interface UsageRecord {
   id: string
@@ -47,100 +47,98 @@ export interface AggregatedMetrics {
   byKey: Record<string, KeyMetrics>
 }
 
-export interface MetricsService {
-  recordUsage(params: RecordUsageParams): Promise<UsageRecord>
-  getUsageByKey(keyId: string): Promise<UsageRecord[]>
-  getUsageByModel(model: string): Promise<UsageRecord[]>
-  getAllUsage(): Promise<UsageRecord[]>
-  getAggregatedMetrics(): Promise<AggregatedMetrics>
-}
+export class MetricsService {
+  constructor(private db: HyperDB) {}
 
-export function createMetricsService(db: HyperDB): MetricsService {
-  return {
-    async recordUsage({ keyId, model, inputTokens, outputTokens, latencyMs }) {
-      const record: UsageRecord = {
-        id: crypto.randomUUID(),
-        keyId,
-        model,
-        inputTokens,
-        outputTokens,
-        latencyMs,
-        timestamp: Date.now(),
+  async recordUsage({
+    keyId,
+    model,
+    inputTokens,
+    outputTokens,
+    latencyMs,
+  }: RecordUsageParams): Promise<UsageRecord> {
+    const record: UsageRecord = {
+      id: crypto.randomUUID(),
+      keyId,
+      model,
+      inputTokens,
+      outputTokens,
+      latencyMs,
+      timestamp: Date.now(),
+    }
+
+    await this.db.insert(USAGE_RECORDS_COLLECTION, record as unknown as Record<string, unknown>)
+    await this.db.flush()
+    return record
+  }
+
+  async getUsageByKey(keyId: string): Promise<UsageRecord[]> {
+    const stream = this.db.find(USAGE_BY_KEY_ID_INDEX, { keyId })
+    return stream.toArray() as Promise<UsageRecord[]>
+  }
+
+  async getUsageByModel(model: string): Promise<UsageRecord[]> {
+    const stream = this.db.find(USAGE_BY_MODEL_INDEX, { model })
+    return stream.toArray() as Promise<UsageRecord[]>
+  }
+
+  async getAllUsage(): Promise<UsageRecord[]> {
+    const stream = this.db.find(USAGE_RECORDS_COLLECTION, {})
+    return stream.toArray() as Promise<UsageRecord[]>
+  }
+
+  async getAggregatedMetrics(): Promise<AggregatedMetrics> {
+    const allRecords = await this.getAllUsage()
+    const now = Date.now()
+    const oneHourAgo = now - 60 * 60 * 1000
+    const oneDayAgo = now - 24 * 60 * 60 * 1000
+
+    // Only process records from the last 24h — older data is irrelevant for this view
+    const records = allRecords.filter((r) => r.timestamp > oneDayAgo)
+    const recentRecords = records.filter((r) => r.timestamp > oneHourAgo)
+    const dailyRecords = records
+
+    const byModel: Record<string, ModelMetrics> = {}
+    for (const r of dailyRecords) {
+      if (!byModel[r.model]) {
+        byModel[r.model] = { requests: 0, inputTokens: 0, outputTokens: 0, totalLatency: 0 }
       }
+      const m = byModel[r.model] as ModelMetrics
+      m.requests++
+      m.inputTokens += r.inputTokens
+      m.outputTokens += r.outputTokens
+      m.totalLatency += r.latencyMs
+    }
 
-      await db.insert(COLLECTIONS.USAGE_RECORDS, record as unknown as Record<string, unknown>)
-      await db.flush()
-      return record
-    },
+    for (const model of Object.keys(byModel)) {
+      const m = byModel[model] as ModelMetrics
+      m.avgLatencyMs = Math.round(m.totalLatency / m.requests)
+    }
 
-    async getUsageByKey(keyId) {
-      const stream = db.find(INDEXES.USAGE_BY_KEY_ID, { keyId })
-      return stream.toArray() as Promise<UsageRecord[]>
-    },
-
-    async getUsageByModel(model) {
-      const stream = db.find(INDEXES.USAGE_BY_MODEL, { model })
-      return stream.toArray() as Promise<UsageRecord[]>
-    },
-
-    async getAllUsage() {
-      const stream = db.find(COLLECTIONS.USAGE_RECORDS, {})
-      return stream.toArray() as Promise<UsageRecord[]>
-    },
-
-    async getAggregatedMetrics() {
-      const records = await this.getAllUsage()
-      const now = Date.now()
-      const oneHourAgo = now - 60 * 60 * 1000
-      const oneDayAgo = now - 24 * 60 * 60 * 1000
-
-      const recentRecords = records.filter((r) => r.timestamp > oneHourAgo)
-      const dailyRecords = records.filter((r) => r.timestamp > oneDayAgo)
-
-      // Per-model aggregation
-      const byModel: Record<string, ModelMetrics> = {}
-      for (const r of dailyRecords) {
-        if (!byModel[r.model]) {
-          byModel[r.model] = { requests: 0, inputTokens: 0, outputTokens: 0, totalLatency: 0 }
-        }
-        const modelMetrics = byModel[r.model] as ModelMetrics
-        modelMetrics.requests++
-        modelMetrics.inputTokens += r.inputTokens
-        modelMetrics.outputTokens += r.outputTokens
-        modelMetrics.totalLatency += r.latencyMs
+    const byKey: Record<string, KeyMetrics> = {}
+    for (const r of dailyRecords) {
+      if (!byKey[r.keyId]) {
+        byKey[r.keyId] = { requests: 0, inputTokens: 0, outputTokens: 0 }
       }
+      const k = byKey[r.keyId] as KeyMetrics
+      k.requests++
+      k.inputTokens += r.inputTokens
+      k.outputTokens += r.outputTokens
+    }
 
-      for (const model of Object.keys(byModel)) {
-        const m = byModel[model] as ModelMetrics
-        m.avgLatencyMs = Math.round(m.totalLatency / m.requests)
-      }
-
-      // Per-key aggregation
-      const byKey: Record<string, KeyMetrics> = {}
-      for (const r of dailyRecords) {
-        if (!byKey[r.keyId]) {
-          byKey[r.keyId] = { requests: 0, inputTokens: 0, outputTokens: 0 }
-        }
-        const keyMetrics = byKey[r.keyId] as KeyMetrics
-        keyMetrics.requests++
-        keyMetrics.inputTokens += r.inputTokens
-        keyMetrics.outputTokens += r.outputTokens
-      }
-
-      return {
-        lastHour: {
-          totalRequests: recentRecords.length,
-          totalInputTokens: recentRecords.reduce((sum, r) => sum + r.inputTokens, 0),
-          totalOutputTokens: recentRecords.reduce((sum, r) => sum + r.outputTokens, 0),
-        },
-        last24h: {
-          totalRequests: dailyRecords.length,
-          totalInputTokens: dailyRecords.reduce((sum, r) => sum + r.inputTokens, 0),
-          totalOutputTokens: dailyRecords.reduce((sum, r) => sum + r.outputTokens, 0),
-        },
-        byModel,
-        byKey,
-      }
-    },
+    return {
+      lastHour: {
+        totalRequests: recentRecords.length,
+        totalInputTokens: recentRecords.reduce((sum, r) => sum + r.inputTokens, 0),
+        totalOutputTokens: recentRecords.reduce((sum, r) => sum + r.outputTokens, 0),
+      },
+      last24h: {
+        totalRequests: dailyRecords.length,
+        totalInputTokens: dailyRecords.reduce((sum, r) => sum + r.inputTokens, 0),
+        totalOutputTokens: dailyRecords.reduce((sum, r) => sum + r.outputTokens, 0),
+      },
+      byModel,
+      byKey,
+    }
   }
 }

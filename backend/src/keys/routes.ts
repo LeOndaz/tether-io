@@ -1,51 +1,58 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { NotFoundError } from '../shared/errors.js'
-import type { KeyService } from './service.js'
+import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { Static } from 'typebox'
+import { Type } from 'typebox'
+import { NotFoundError } from '../shared/errors'
+import type { KeyService } from './service'
+
+const CreateKeyBody = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 100 }),
+  permissions: Type.Optional(
+    Type.Union([Type.Literal('inference'), Type.Literal('admin')], { default: 'inference' }),
+  ),
+  rateLimitRequestsPerMin: Type.Optional(Type.Integer({ minimum: 1, default: 60 })),
+  rateLimitTokensPerHour: Type.Optional(Type.Integer({ minimum: 1, default: 100000 })),
+})
+
+const CreateKeyResponse = Type.Object({
+  id: Type.String(),
+  name: Type.String(),
+  key: Type.String({ description: 'Full API key — shown only once' }),
+  prefix: Type.String(),
+  permissions: Type.String(),
+  createdAt: Type.Number(),
+})
+
+const KeyListItem = Type.Object({
+  id: Type.String(),
+  name: Type.String(),
+  prefix: Type.String(),
+  permissions: Type.String(),
+  lastUsedAt: Type.Union([Type.Number(), Type.Null()]),
+  createdAt: Type.Number(),
+})
+
+const IdParams = Type.Object({
+  id: Type.String(),
+})
 
 export function createKeyRoutes(
   keyService: KeyService,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function keyRoutes(fastify) {
-    fastify.post(
+    fastify.post<{ Body: Static<typeof CreateKeyBody> }>(
       '/api/keys',
       {
         schema: {
           tags: ['API Keys'],
           description: 'Create a new API key. The full key is returned only once.',
-          body: {
-            type: 'object',
-            required: ['name'],
-            properties: {
-              name: { type: 'string', minLength: 1, maxLength: 100 },
-              permissions: { type: 'string', enum: ['inference', 'admin'], default: 'inference' },
-              rateLimitRequestsPerMin: { type: 'integer', minimum: 1, default: 60 },
-              rateLimitTokensPerHour: { type: 'integer', minimum: 1, default: 100000 },
-            },
-          },
+          body: CreateKeyBody,
           response: {
-            201: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                key: { type: 'string', description: 'Full API key — shown only once' },
-                prefix: { type: 'string' },
-                permissions: { type: 'string' },
-                createdAt: { type: 'number' },
-              },
-            },
+            201: CreateKeyResponse,
           },
         },
       },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        const result = await keyService.generate(
-          request.body as {
-            name: string
-            permissions?: string
-            rateLimitRequestsPerMin?: number
-            rateLimitTokensPerHour?: number
-          },
-        )
+      async (request, reply: FastifyReply) => {
+        const result = await keyService.generate(request.body)
         reply.status(201)
         return {
           id: result.id,
@@ -65,20 +72,7 @@ export function createKeyRoutes(
           tags: ['API Keys'],
           description: 'List all API keys (prefix only, never full key)',
           response: {
-            200: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  name: { type: 'string' },
-                  prefix: { type: 'string' },
-                  permissions: { type: 'string' },
-                  lastUsedAt: { type: 'number' },
-                  createdAt: { type: 'number' },
-                },
-              },
-            },
+            200: Type.Array(KeyListItem),
           },
         },
       },
@@ -95,21 +89,31 @@ export function createKeyRoutes(
       },
     )
 
-    fastify.get(
+    const KeyDetail = Type.Object({
+      id: Type.String(),
+      name: Type.String(),
+      prefix: Type.String(),
+      permissions: Type.String(),
+      rateLimitRequestsPerMin: Type.Number(),
+      rateLimitTokensPerHour: Type.Number(),
+      lastUsedAt: Type.Union([Type.Number(), Type.Null()]),
+      createdAt: Type.Number(),
+    })
+
+    fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/keys/:id',
       {
         schema: {
           tags: ['API Keys'],
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
+          description: 'Get API key details by ID',
+          params: IdParams,
+          response: { 200: KeyDetail },
         },
       },
-      async (request: FastifyRequest) => {
-        const { id } = request.params as { id: string }
+      async (request) => {
+        const { id } = request.params
         const key = await keyService.getById(id)
-        if (!key) throw new NotFoundError('API key')
+        if (!key) throw new NotFoundError('API key not found')
         return {
           id: key.id,
           name: key.name,
@@ -123,24 +127,21 @@ export function createKeyRoutes(
       },
     )
 
-    fastify.delete(
+    fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/keys/:id',
       {
         schema: {
           tags: ['API Keys'],
-          params: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-          },
-          response: { 204: { type: 'null' } },
+          params: IdParams,
+          response: { 204: Type.Null() },
         },
       },
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        const { id } = request.params as { id: string }
+      async (request, reply: FastifyReply) => {
+        const { id } = request.params
         const key = await keyService.getById(id)
-        if (!key) throw new NotFoundError('API key')
+        if (!key) throw new NotFoundError('API key not found')
         await keyService.deleteKey(id)
-        reply.status(204)
+        return reply.status(204).send()
       },
     )
   }

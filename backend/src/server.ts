@@ -1,102 +1,86 @@
+import fastifySSE from '@fastify/sse'
 import Fastify from 'fastify'
-import type { AppConfig } from './config/index.js'
-import { loadConfig } from './config/index.js'
-import { createDatabase } from './db/index.js'
-import { createDeploymentRoutes } from './deployments/routes.js'
-import { createDeploymentService } from './deployments/service.js'
-import { healthRoutes } from './health/routes.js'
-import { createInferenceRoutes } from './inference/routes.js'
-import { createKeyRoutes } from './keys/routes.js'
-import { createKeyService } from './keys/service.js'
-import { createMetricsRoutes } from './metrics/routes.js'
-import { createMetricsService } from './metrics/service.js'
-import { createAuthMiddleware } from './middleware/auth.js'
-import { corsPlugin } from './shared/plugins/cors.js'
-import { errorHandlerPlugin } from './shared/plugins/error-handler.js'
-import { swaggerPlugin } from './shared/plugins/swagger.js'
-import { CompositeRateLimiter } from './shared/rate-limit/limiter.js'
-import { SlidingWindowStrategy } from './shared/rate-limit/strategies/sliding-window.js'
-import { TokenBucketStrategy } from './shared/rate-limit/strategies/token-bucket.js'
-import { createDispatcher } from './workers/dispatcher.js'
-import { createWorkerRoutes } from './workers/routes.js'
-import { ModelAffinityStrategy } from './workers/strategies/model-affinity.js'
+import { createDeploymentRoutes } from './deployments/routes'
+import { container } from './di/index'
+import { healthRoutes } from './health/routes'
+import { createInferenceRoutes } from './inference/routes'
+import { createKeyRoutes } from './keys/routes'
+import { createMetricsRoutes } from './metrics/routes'
+import { createCorsPlugin } from './shared/plugins/cors'
+import { errorHandlerPlugin } from './shared/plugins/error-handler'
+import { createSwaggerPlugin } from './shared/plugins/swagger'
+import { createTestRoutes } from './testing/routes'
+import { createWorkerRoutes } from './workers/routes'
 
-export function buildServer(config: AppConfig) {
-  const fastify = Fastify({
-    logger: {
-      level: config.logLevel,
-    },
-  })
+const {
+  config,
+  logger,
+  dispatcher,
+  discovery,
+  keyService,
+  deploymentService,
+  metricsService,
+  authMiddleware,
+} = container
 
-  fastify.decorate('config', config)
+const fastify = Fastify({
+  logger: {
+    level: config.logLevel,
+  },
+})
 
-  return fastify
+// Register plugins
+await fastify.register(createCorsPlugin(config))
+await fastify.register(errorHandlerPlugin)
+await fastify.register(fastifySSE)
+await fastify.register(createSwaggerPlugin(config))
+
+// Register routes — services injected from container
+await fastify.register(healthRoutes)
+await fastify.register(createKeyRoutes(keyService))
+await fastify.register(createDeploymentRoutes(deploymentService))
+await fastify.register(
+  createInferenceRoutes(dispatcher, metricsService, deploymentService, authMiddleware),
+)
+await fastify.register(createMetricsRoutes(metricsService, dispatcher))
+await fastify.register(createWorkerRoutes(dispatcher))
+
+// Test-only routes — never registered in production
+if (process.env.NODE_ENV === 'test') {
+  await fastify.register(
+    createTestRoutes({
+      db: container.db,
+      keyService,
+      deploymentService,
+      dispatcher,
+    }),
+  )
+  logger.warn('test routes registered — NODE_ENV=test')
 }
 
-export async function startServer(config: AppConfig) {
-  const fastify = buildServer(config)
+// Fail deployments orphaned by a previous gateway crash/restart
+await deploymentService.recoverStuckDeployments()
 
-  // Initialize database
-  const db = await createDatabase('./storage/gateway')
+// Start Hyperswarm-based worker discovery and DB replication
+await discovery.start()
+await container.dbReplicator.start()
 
-  // Initialize services (no singletons — each created explicitly)
-  const keyService = createKeyService(db)
-  const metricsService = createMetricsService(db)
+await fastify.listen({ port: config.port, host: config.host })
 
-  // Rate limiter: request-based (token bucket) + context-based (sliding window for tokens)
-  const rateLimiter = new CompositeRateLimiter([
-    {
-      name: 'requests',
-      strategy: new TokenBucketStrategy({
-        capacity: config.rateLimit.requestsPerMin,
-        refillRate: Math.ceil(config.rateLimit.requestsPerMin / 6),
-        refillIntervalMs: 10_000,
-      }),
-    },
-    {
-      name: 'tokens',
-      strategy: new SlidingWindowStrategy({
-        limit: config.rateLimit.tokensPerHour,
-        windowMs: 60 * 60 * 1000,
-      }),
-    },
-  ])
-
-  // RPC dispatcher with model affinity load balancing
-  const dispatcher = await createDispatcher(config, new ModelAffinityStrategy())
-  const deploymentService = createDeploymentService(db, dispatcher)
-
-  // Auth middleware
-  const authMiddleware = createAuthMiddleware(keyService, rateLimiter)
-
-  // Register plugins
-  await fastify.register(corsPlugin)
-  await fastify.register(errorHandlerPlugin)
-  await fastify.register(swaggerPlugin)
-
-  // Register routes
-  await fastify.register(healthRoutes)
-  await fastify.register(createKeyRoutes(keyService))
-  await fastify.register(createDeploymentRoutes(deploymentService))
-  await fastify.register(createInferenceRoutes(dispatcher, metricsService, authMiddleware))
-  await fastify.register(createMetricsRoutes(metricsService, dispatcher))
-  await fastify.register(createWorkerRoutes(dispatcher))
-
-  await fastify.listen({ port: config.port, host: config.host })
-
-  const shutdown = async () => {
-    fastify.log.info('shutting down...')
+let shuttingDown = false
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  logger.info('shutting down...')
+  try {
     await fastify.close()
-    await dispatcher.shutdown()
-    await db.close()
-    process.exit(0)
+  } catch (err) {
+    logger.error({ err }, 'error closing fastify')
   }
-
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
-
-  return fastify
+  deploymentService.destroy()
+  await container.shutdown()
+  process.exit(0)
 }
 
-const config = loadConfig()
-startServer(config)
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)

@@ -1,4 +1,4 @@
-import type { LBStrategy, WorkerInfo } from '../dispatcher.js'
+import type { LBStrategy, WorkerInfo } from '../dispatcher'
 
 export class LeastConnectionsStrategy implements LBStrategy {
   select(workers: WorkerInfo[], _request: unknown): WorkerInfo | null {

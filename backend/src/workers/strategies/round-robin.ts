@@ -1,4 +1,4 @@
-import type { LBStrategy, WorkerInfo } from '../dispatcher.js'
+import type { LBStrategy, WorkerInfo } from '../dispatcher'
 
 export class RoundRobinStrategy implements LBStrategy {
   private index = 0

@@ -1,35 +1,33 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
-import type { Dispatcher } from './dispatcher.js'
+import type { FastifyInstance } from 'fastify'
+import { Type } from 'typebox'
+import type { Dispatcher } from './dispatcher'
+
+const WorkerInfo = Type.Object({
+  workerId: Type.String(),
+  rpcPublicKey: Type.String(),
+  healthy: Type.Boolean(),
+  activeJobs: Type.Number(),
+  streamUrl: Type.Union([Type.String(), Type.Null()]),
+  loadedModels: Type.Array(Type.String()),
+})
 
 export function createWorkerRoutes(
   dispatcher: Dispatcher,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function workerRoutes(fastify) {
-    fastify.post(
-      '/internal/workers/register',
+    fastify.get(
+      '/internal/workers',
       {
         schema: {
           tags: ['Internal'],
-          description: 'Register a worker with the gateway',
-          body: {
-            type: 'object',
-            required: ['workerId', 'rpcPublicKey'],
-            properties: {
-              workerId: { type: 'string' },
-              rpcPublicKey: { type: 'string' },
-            },
-          },
+          description: 'List all known workers and their status',
           response: {
-            200: {
-              type: 'object',
-              properties: { status: { type: 'string' } },
-            },
+            200: Type.Object({ workers: Type.Array(WorkerInfo) }),
           },
         },
       },
-      async (request: FastifyRequest) => {
-        dispatcher.registerWorker(request.body as { workerId: string; rpcPublicKey: string })
-        return { status: 'registered' }
+      async () => {
+        return { workers: dispatcher.getWorkers() }
       },
     )
 
@@ -39,6 +37,17 @@ export function createWorkerRoutes(
         schema: {
           tags: ['Internal'],
           description: 'Test RPC connectivity to all workers',
+          response: {
+            200: Type.Object({
+              results: Type.Array(
+                Type.Object({
+                  status: Type.String(),
+                  value: Type.Optional(Type.Any()),
+                  reason: Type.Optional(Type.String()),
+                }),
+              ),
+            }),
+          },
         },
       },
       async () => {
@@ -50,32 +59,6 @@ export function createWorkerRoutes(
             reason: r.status === 'rejected' ? r.reason?.message : undefined,
           })),
         }
-      },
-    )
-
-    fastify.post(
-      '/internal/workers/deregister',
-      {
-        schema: {
-          tags: ['Internal'],
-          body: {
-            type: 'object',
-            required: ['rpcPublicKey'],
-            properties: {
-              rpcPublicKey: { type: 'string' },
-            },
-          },
-          response: {
-            200: {
-              type: 'object',
-              properties: { status: { type: 'string' } },
-            },
-          },
-        },
-      },
-      async (request: FastifyRequest) => {
-        dispatcher.deregisterWorker(request.body as { rpcPublicKey: string })
-        return { status: 'deregistered' }
       },
     )
   }

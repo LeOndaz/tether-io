@@ -1,4 +1,4 @@
-import { AppError } from '../shared/errors.js'
+import { AppError } from '../shared/errors'
 
 export class WorkerUnavailableError extends AppError {
   constructor(message = 'No workers available', details?: unknown) {
