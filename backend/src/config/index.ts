@@ -1,18 +1,4 @@
-import { type Static, Type } from 'typebox'
-import { Value } from 'typebox/value'
-
-const EnvSchema = Type.Object({
-  PORT: Type.String(),
-  HOST: Type.String(),
-  LOG_LEVEL: Type.Optional(Type.String()),
-  DHT_BOOTSTRAP: Type.Optional(Type.String()),
-  CLUSTER_TOPIC: Type.Optional(Type.String()),
-  RATE_LIMIT_REQUESTS_PER_MIN: Type.String(),
-  RATE_LIMIT_TOKENS_PER_HOUR: Type.String(),
-  FRONTEND_URL: Type.Optional(Type.String()),
-})
-
-type Env = Static<typeof EnvSchema>
+import { parseGatewayEnv } from './env'
 
 export interface RateLimitConfig {
   requestsPerMin: number
@@ -30,12 +16,11 @@ export interface AppConfig {
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): AppConfig {
-  const parsed = Value.Decode(EnvSchema, env)
-  const validated: Env = parsed
+  const parsed = parseGatewayEnv(env)
 
-  const port = Number.parseInt(validated.PORT, 10)
-  const requestsPerMin = Number.parseInt(validated.RATE_LIMIT_REQUESTS_PER_MIN, 10)
-  const tokensPerHour = Number.parseInt(validated.RATE_LIMIT_TOKENS_PER_HOUR, 10)
+  const port = Number.parseInt(parsed.PORT, 10)
+  const requestsPerMin = Number.parseInt(parsed.RATE_LIMIT_REQUESTS_PER_MIN, 10)
+  const tokensPerHour = Number.parseInt(parsed.RATE_LIMIT_TOKENS_PER_HOUR, 10)
 
   if (Number.isNaN(port) || Number.isNaN(requestsPerMin) || Number.isNaN(tokensPerHour)) {
     throw new Error(
@@ -45,11 +30,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 
   return {
     port,
-    host: validated.HOST,
-    logLevel: validated.LOG_LEVEL ?? 'info',
+    host: parsed.HOST,
+    logLevel: parsed.LOG_LEVEL ?? 'info',
     rateLimit: { requestsPerMin, tokensPerHour },
-    dhtBootstrap: validated.DHT_BOOTSTRAP ?? null,
-    clusterTopic: validated.CLUSTER_TOPIC ?? 'ai-paas-cluster-v1',
-    frontendUrl: validated.FRONTEND_URL ?? null,
+    dhtBootstrap: parsed.DHT_BOOTSTRAP ?? null,
+    clusterTopic: parsed.CLUSTER_TOPIC ?? 'ai-paas-cluster-v1',
+    frontendUrl: parsed.FRONTEND_URL ?? null,
   }
 }
