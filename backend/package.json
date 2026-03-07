@@ -8,24 +8,28 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/**/*.test.js",
-    "build:schema": "node spec/build.cjs"
+    "test": "tsx --test test/**/*.test.ts",
+    "build:schema": "tsx commands/build-schema.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",
+    "@fastify/sse": "0.4.0",
     "@fastify/swagger": "^9.4.0",
     "@fastify/swagger-ui": "^5.2.0",
     "@hyperswarm/rpc": "^3.0.0",
-    "corestore": "^7.0.0",
     "fastify": "^5.2.0",
+    "fastify-plugin": "^5.1.0",
     "hypercore": "^11.0.0",
     "hyperdb": "^6.0.0",
     "hyperdht": "^6.29.1",
     "hyperschema": "^1.20.0",
-    "hyperswarm": "^4.0.0"
+    "hyperswarm": "^4.0.0",
+    "pino": "^10.3.1",
+    "typebox": "^1.1.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
+    "@types/pino": "^7.0.5",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

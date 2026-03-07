@@ -19,13 +19,15 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - LOG_LEVEL=info
-      - OLLAMA_URL=http://host.docker.internal:11434
-      - MODEL_RUNTIME=ollama
-      - CLUSTER_TOPIC=ai-paas-cluster-v1
       - DHT_BOOTSTRAP=dht-bootstrap:49737
+      - CLUSTER_TOPIC=ai-paas-cluster-v1
       - RATE_LIMIT_REQUESTS_PER_MIN=60
       - RATE_LIMIT_TOKENS_PER_HOUR=100000
+    # Bind-mount source for hot reload via tsx --watch
+    command: ["pnpm", "run", "dev"]
     volumes:
+      - ./backend/src:/app/src
+      - /app/node_modules # prevent host node_modules from overriding container's
       - gateway_storage:/app/storage
     depends_on:
       dht-bootstrap:
@@ -39,15 +41,18 @@ services:
       - MODEL_RUNTIME=ollama
       - CLUSTER_TOPIC=ai-paas-cluster-v1
       - DHT_BOOTSTRAP=dht-bootstrap:49737
-      - GATEWAY_URL=http://gateway:3000
+      - WORKER_STREAM_PORT=8080
+      - WORKER_STREAM_HOST=worker-1
       - LOG_LEVEL=info
+    # Bind-mount source for hot reload via tsx --watch
+    command: ["pnpm", "run", "dev"]
     volumes:
+      - ./worker/src:/app/src
+      - /app/node_modules
       - worker1_storage:/app/storage
     depends_on:
       dht-bootstrap:
         condition: service_healthy
-      gateway:
-        condition: service_started
 
   worker-2:
     build: ./worker
@@ -57,15 +62,18 @@ services:
       - MODEL_RUNTIME=ollama
       - CLUSTER_TOPIC=ai-paas-cluster-v1
       - DHT_BOOTSTRAP=dht-bootstrap:49737
-      - GATEWAY_URL=http://gateway:3000
+      - WORKER_STREAM_PORT=8080
+      - WORKER_STREAM_HOST=worker-2
       - LOG_LEVEL=info
+    # Bind-mount source for hot reload via tsx --watch
+    command: ["pnpm", "run", "dev"]
     volumes:
+      - ./worker/src:/app/src
+      - /app/node_modules
       - worker2_storage:/app/storage
     depends_on:
       dht-bootstrap:
         condition: service_healthy
-      gateway:
-        condition: service_started
 
   frontend:
     build: ./frontend
@@ -73,6 +81,10 @@ services:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:3000
+    # Bind-mount source for Vite HMR (hot module replacement)
+    volumes:
+      - ./frontend/src:/app/src
+      - /app/node_modules
 
 volumes:
   gateway_storage:
