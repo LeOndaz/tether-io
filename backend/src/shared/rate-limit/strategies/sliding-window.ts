@@ -1,4 +1,4 @@
-import type { RateLimitCheckResult, RateLimitStrategy } from '../limiter.js'
+import type { RateLimitCheckResult, RateLimitStrategy } from '../limiter'
 
 interface SlidingWindowConfig {
   limit: number
@@ -9,21 +9,25 @@ export class SlidingWindowStrategy implements RateLimitStrategy {
   private limit: number
   private windowMs: number
   private logs = new Map<string, number[]>()
+  private lastPurge = Date.now()
+  private purgeIntervalMs: number
 
   constructor({ limit, windowMs }: SlidingWindowConfig) {
     this.limit = limit
     this.windowMs = windowMs
+    this.purgeIntervalMs = windowMs * 2
   }
 
-  async check(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
+  async checkAndConsume(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
     const now = Date.now()
-    this._cleanup(identifier, now)
+    this.purgeStale(now)
+    this.cleanup(identifier, now)
 
-    const timestamps = this.logs.get(identifier) || []
+    const timestamps = this.logs.get(identifier) ?? []
     const currentCount = timestamps.length
 
     if (currentCount + cost > this.limit) {
-      const oldestInWindow = timestamps[0] || now
+      const oldestInWindow = timestamps[0] ?? now
       const retryAfter = Math.ceil((oldestInWindow + this.windowMs - now) / 1000)
       return {
         allowed: false,
@@ -33,6 +37,12 @@ export class SlidingWindowStrategy implements RateLimitStrategy {
       }
     }
 
+    // Atomic: consume immediately after check passes
+    for (let i = 0; i < cost; i++) {
+      timestamps.push(now)
+    }
+    this.logs.set(identifier, timestamps)
+
     return {
       allowed: true,
       remaining: this.limit - currentCount - cost,
@@ -40,18 +50,17 @@ export class SlidingWindowStrategy implements RateLimitStrategy {
     }
   }
 
-  async consume(identifier: string, cost = 1): Promise<void> {
-    const now = Date.now()
-    this._cleanup(identifier, now)
-
-    const timestamps = this.logs.get(identifier) || []
-    for (let i = 0; i < cost; i++) {
-      timestamps.push(now)
+  private purgeStale(now: number): void {
+    if (now - this.lastPurge < this.purgeIntervalMs) return
+    this.lastPurge = now
+    const cutoff = now - this.windowMs
+    for (const [key, timestamps] of this.logs) {
+      const latest = timestamps[timestamps.length - 1] ?? 0
+      if (latest <= cutoff) this.logs.delete(key)
     }
-    this.logs.set(identifier, timestamps)
   }
 
-  private _cleanup(identifier: string, now: number): void {
+  private cleanup(identifier: string, now: number): void {
     const timestamps = this.logs.get(identifier)
     if (!timestamps) return
 

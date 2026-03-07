@@ -1,4 +1,4 @@
-import { RateLimitError } from '../errors.js'
+import { RateLimitError } from '../errors'
 
 export interface RateLimitCheckResult {
   allowed: boolean
@@ -9,8 +9,8 @@ export interface RateLimitCheckResult {
 }
 
 export interface RateLimitStrategy {
-  check(identifier: string, cost?: number): Promise<RateLimitCheckResult>
-  consume(identifier: string, cost?: number): Promise<void>
+  /** Atomically check and consume in one step. Returns the result; throws nothing. */
+  checkAndConsume(identifier: string, cost?: number): Promise<RateLimitCheckResult>
 }
 
 export interface NamedStrategy {
@@ -25,32 +25,17 @@ export class CompositeRateLimiter {
     this.strategies = strategies
   }
 
-  async check(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
+  async checkAndConsume(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
     for (const { name, strategy } of this.strategies) {
-      const result = await strategy.check(identifier, cost)
+      const result = await strategy.checkAndConsume(identifier, cost)
       if (!result.allowed) {
-        return { ...result, limitName: name }
+        throw new RateLimitError(result.retryAfter ?? 0, {
+          limit: name,
+          remaining: result.remaining,
+          resetAt: result.resetAt?.toISOString(),
+        })
       }
     }
     return { allowed: true }
-  }
-
-  async consume(identifier: string, cost = 1): Promise<void> {
-    for (const { strategy } of this.strategies) {
-      await strategy.consume(identifier, cost)
-    }
-  }
-
-  async checkAndConsume(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
-    const result = await this.check(identifier, cost)
-    if (!result.allowed) {
-      throw new RateLimitError(result.retryAfter ?? 0, {
-        limit: result.limitName,
-        remaining: result.remaining,
-        resetAt: result.resetAt?.toISOString(),
-      })
-    }
-    await this.consume(identifier, cost)
-    return result
   }
 }

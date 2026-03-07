@@ -17,12 +17,6 @@ export class AuthError extends AppError {
   }
 }
 
-export class ForbiddenError extends AppError {
-  constructor(message = 'Insufficient permissions', details?: unknown) {
-    super(message, 403, 'FORBIDDEN', details)
-  }
-}
-
 export class RateLimitError extends AppError {
   retryAfter: number
 
@@ -33,13 +27,13 @@ export class RateLimitError extends AppError {
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource = 'Resource', details?: unknown) {
-    super(`${resource} not found`, 404, 'NOT_FOUND', details)
+  constructor(message = 'Resource not found', details?: unknown) {
+    super(message, 404, 'NOT_FOUND', details)
   }
 }
 
 export class ValidationError extends AppError {
   constructor(message = 'Validation failed', details?: unknown) {
-    super(message, 400, 'VALIDATION_ERROR', details)
+    super(message, 422, 'VALIDATION_ERROR', details)
   }
 }

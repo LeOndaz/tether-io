@@ -1,4 +1,4 @@
-import type { RateLimitCheckResult, RateLimitStrategy } from '../limiter.js'
+import type { RateLimitCheckResult, RateLimitStrategy } from '../limiter'
 
 interface FixedWindowConfig {
   limit: number
@@ -20,12 +20,19 @@ export class FixedWindowStrategy implements RateLimitStrategy {
     this.windowMs = windowMs
   }
 
-  async check(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
+  async checkAndConsume(identifier: string, cost = 1): Promise<RateLimitCheckResult> {
     const now = Date.now()
     const windowStart = Math.floor(now / this.windowMs) * this.windowMs
     const windowKey = `${identifier}:${windowStart}`
 
-    const entry = this.windows.get(windowKey) || { count: 0, windowStart }
+    // Clean old windows
+    for (const [key, val] of this.windows) {
+      if (val.windowStart + this.windowMs < now) {
+        this.windows.delete(key)
+      }
+    }
+
+    const entry = this.windows.get(windowKey) ?? { count: 0, windowStart }
 
     if (entry.count + cost > this.limit) {
       return {
@@ -36,27 +43,14 @@ export class FixedWindowStrategy implements RateLimitStrategy {
       }
     }
 
-    return {
-      allowed: true,
-      remaining: this.limit - entry.count - cost,
-      resetAt: new Date(windowStart + this.windowMs),
-    }
-  }
-
-  async consume(identifier: string, cost = 1): Promise<void> {
-    const now = Date.now()
-    const windowStart = Math.floor(now / this.windowMs) * this.windowMs
-    const windowKey = `${identifier}:${windowStart}`
-
-    const entry = this.windows.get(windowKey) || { count: 0, windowStart }
+    // Atomic: consume immediately after check passes
     entry.count += cost
     this.windows.set(windowKey, entry)
 
-    // Clean up old windows
-    for (const [key, val] of this.windows) {
-      if (val.windowStart + this.windowMs < now) {
-        this.windows.delete(key)
-      }
+    return {
+      allowed: true,
+      remaining: this.limit - entry.count,
+      resetAt: new Date(windowStart + this.windowMs),
     }
   }
 }
