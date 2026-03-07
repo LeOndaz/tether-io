@@ -1,17 +1,20 @@
-import { describe, it, after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
-import { createDatabase } from '../src/db/index.js'
-import { createKeyService } from '../src/keys/service.js'
+import { after, before, describe, it } from 'node:test'
+import type { HyperDB } from 'hyperdb'
+import { createDatabase } from '../src/db/index'
+import { KeyService } from '../src/keys/service'
 
 const TEST_DB = './storage/_test_keys'
 
 describe('key-service', () => {
-  let db, keyService
+  let db: HyperDB
+  let keyService: KeyService
 
   before(async () => {
-    db = await createDatabase(TEST_DB)
-    keyService = createKeyService(db)
+    const result = await createDatabase(TEST_DB)
+    db = result.db
+    keyService = new KeyService(db)
   })
 
   after(async () => {
