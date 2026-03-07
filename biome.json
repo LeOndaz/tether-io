@@ -1,7 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
   "files": {
-    "ignore": ["backend/spec/hyperdb/", "backend/spec/hyperschema/"]
+    "ignore": [
+      "backend/spec/hyperdb/",
+      "backend/spec/hyperschema/",
+      "worker/spec/hyperdb/",
+      "worker/spec/hyperschema/"
+    ]
   },
   "organizeImports": {
     "enabled": true

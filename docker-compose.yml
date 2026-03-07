@@ -5,7 +5,7 @@ services:
       - DHT_PORT=49737
       - DHT_HOST=0.0.0.0
     healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
+      test: ["CMD", "node", "-e", "require('net').createConnection(49737,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
       interval: 2s
       timeout: 3s
       retries: 5

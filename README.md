@@ -105,10 +105,10 @@ const client = new OpenAI({ apiKey: 'sk-...', baseURL: 'http://localhost:3000/v1
 ai-paas/
 ├── backend/          Fastify gateway API
 │   ├── src/
-│   │   ├── server.js         Entry point
+│   │   ├── server.ts         Entry point
 │   │   ├── config/           Environment config
 │   │   ├── db/               HyperDB initialization
-│   │   ├── errors.js         Typed error classes
+│   │   ├── errors.ts         Typed error classes
 │   │   ├── middleware/       Auth middleware
 │   │   ├── plugins/          Fastify plugins (CORS, Swagger, errors)
 │   │   ├── rate-limit/       Rate limiter + strategies
@@ -119,8 +119,8 @@ ai-paas/
 │   └── test/                 Tests
 ├── worker/           Hyperswarm RPC worker
 │   └── src/
-│       ├── index.js          Entry point
-│       ├── rpc-server.js     RPC method handlers
+│       ├── index.ts          Entry point
+│       ├── rpc-server.ts     RPC method handlers
 │       └── runtime/          Swappable model runtime adapter
 ├── frontend/         React dashboard
 │   └── src/

@@ -61,9 +61,9 @@ const encoding0 = {
       rateLimitRequestsPerMin: (flags & 2) !== 0 ? c.uint.decode(state) : 0,
       rateLimitTokensPerHour: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
       lastUsedAt: (flags & 8) !== 0 ? c.uint.decode(state) : 0,
-      createdAt: c.uint.decode(state)
+      createdAt: c.uint.decode(state),
     }
-  }
+  },
 }
 
 // @aipaas/deployment
@@ -108,9 +108,9 @@ const encoding1 = {
       temperature: (flags & 2) !== 0 ? c.float32.decode(state) : 0,
       maxTokens: (flags & 4) !== 0 ? c.uint.decode(state) : 0,
       createdAt: c.uint.decode(state),
-      updatedAt: c.uint.decode(state)
+      updatedAt: c.uint.decode(state),
     }
-  }
+  },
 }
 
 // @aipaas/usageRecord
@@ -149,9 +149,9 @@ const encoding2 = {
       inputTokens: r3,
       outputTokens: r4,
       latencyMs: r5,
-      timestamp: r6
+      timestamp: r6,
     }
-  }
+  },
 }
 
 function setVersion(v) {
@@ -202,7 +202,7 @@ function getStruct(name, v = VERSION) {
     decode(state) {
       version = v
       return enc.decode(state)
-    }
+    },
   }
 }
 

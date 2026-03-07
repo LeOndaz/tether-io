@@ -9,14 +9,10 @@
       "type": 1,
       "version": 1,
       "versionField": null,
-      "indexes": [
-        "@aipaas/apiKeys-by-hash"
-      ],
+      "indexes": ["@aipaas/apiKeys-by-hash"],
       "schema": "@aipaas/apiKey",
       "derived": false,
-      "key": [
-        "id"
-      ],
+      "key": ["id"],
       "trigger": null
     },
     {
@@ -26,14 +22,10 @@
       "type": 1,
       "version": 1,
       "versionField": null,
-      "indexes": [
-        "@aipaas/deployments-by-model"
-      ],
+      "indexes": ["@aipaas/deployments-by-model"],
       "schema": "@aipaas/deployment",
       "derived": false,
-      "key": [
-        "id"
-      ],
+      "key": ["id"],
       "trigger": null
     },
     {
@@ -43,15 +35,10 @@
       "type": 1,
       "version": 1,
       "versionField": null,
-      "indexes": [
-        "@aipaas/usageRecords-by-keyId",
-        "@aipaas/usageRecords-by-model"
-      ],
+      "indexes": ["@aipaas/usageRecords-by-keyId", "@aipaas/usageRecords-by-model"],
       "schema": "@aipaas/usageRecord",
       "derived": false,
-      "key": [
-        "id"
-      ],
+      "key": ["id"],
       "trigger": null
     },
     {
@@ -63,9 +50,7 @@
       "collection": "@aipaas/apiKeys",
       "unique": true,
       "deprecated": false,
-      "key": [
-        "hash"
-      ]
+      "key": ["hash"]
     },
     {
       "name": "deployments-by-model",
@@ -76,9 +61,7 @@
       "collection": "@aipaas/deployments",
       "unique": false,
       "deprecated": false,
-      "key": [
-        "model"
-      ]
+      "key": ["model"]
     },
     {
       "name": "usageRecords-by-keyId",
@@ -89,9 +72,7 @@
       "collection": "@aipaas/usageRecords",
       "unique": false,
       "deprecated": false,
-      "key": [
-        "keyId"
-      ]
+      "key": ["keyId"]
     },
     {
       "name": "usageRecords-by-model",
@@ -102,9 +83,7 @@
       "collection": "@aipaas/usageRecords",
       "unique": false,
       "deprecated": false,
-      "key": [
-        "model"
-      ]
+      "key": ["model"]
     }
   ]
 }

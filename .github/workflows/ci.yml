@@ -20,6 +20,21 @@ jobs:
       - run: pnpm install
       - run: pnpm biome check .
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - run: pnpm install
+      - run: pnpm --filter backend typecheck
+      - run: pnpm --filter worker typecheck
+      - run: pnpm --filter frontend typecheck
+
   test-backend:
     runs-on: ubuntu-latest
     steps:

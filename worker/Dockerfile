@@ -10,4 +10,6 @@ RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
-CMD ["node", "src/index.js"]
+RUN pnpm build
+
+CMD ["node", "dist/index.js"]
