@@ -39,7 +39,10 @@ export function createAuthMiddleware(
   // Cache limiters per key ID so state persists across requests
   const limiterCache = new Map<string, CompositeRateLimiter>()
 
-  // Fallback limiter for keys that use default limits
+  // Shared limiter for keys using default limits — each key is still rate-limited
+  // independently via its key ID as the identifier in checkAndConsume().
+  // Note: "tokens" strategy counts requests (cost=1), not actual token usage,
+  // because token counts are only known after inference completes.
   const defaultLimiter = new CompositeRateLimiter([
     {
       name: 'requests',

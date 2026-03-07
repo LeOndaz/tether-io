@@ -55,22 +55,12 @@ export interface Dispatcher {
 }
 
 const HEALTH_CHECK_INTERVAL_MS = 30_000
+const HEALTH_CHECK_TIMEOUT_MS = 10_000
 const MAX_CONSECUTIVE_FAILURES = 3
 
 /** Creates a shared DHT instance for both the dispatcher and worker discovery. */
 export async function createDHT(config: AppConfig): Promise<DHT> {
-  const bootstrap = config.dhtBootstrap
-    ? (() => {
-        const parts = config.dhtBootstrap.split(':')
-        const host = parts[0] ?? 'localhost'
-        const port = Number.parseInt(parts[1] ?? '49737', 10)
-        if (Number.isNaN(port) || port < 1 || port > 65535) {
-          throw new Error(`Invalid DHT_BOOTSTRAP port: ${parts[1]}`)
-        }
-        return [{ host, port }]
-      })()
-    : undefined
-  const dht = new DHT({ bootstrap, firewalled: false })
+  const dht = new DHT({ bootstrap: config.dhtBootstrapNodes, firewalled: false })
   await dht.ready()
   return dht
 }
@@ -160,7 +150,11 @@ export async function createDispatcher(
 
   async function rpcRequest(publicKey: Buffer, method: string, payload: unknown): Promise<unknown> {
     const response = await rpc.request(publicKey, method, Buffer.from(JSON.stringify(payload)))
-    return JSON.parse(response.toString())
+    const parsed = JSON.parse(response.toString())
+    if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+      throw new Error(parsed.error as string)
+    }
+    return parsed
   }
 
   async function request(method: string, payload: unknown): Promise<unknown> {
@@ -214,11 +208,23 @@ export async function createDispatcher(
     await Promise.allSettled(
       [...workers.values()].map(async (worker) => {
         try {
-          const result = (await rpcRequest(worker.publicKey, 'health.check', {})) as {
+          const result = (await Promise.race([
+            rpcRequest(worker.publicKey, 'health.check', {}),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error('health check timed out')),
+                HEALTH_CHECK_TIMEOUT_MS,
+              ),
+            ),
+          ])) as {
             healthy?: boolean
             models?: string[]
           }
-          markWorkerHealthy(worker)
+          if (result.healthy === false) {
+            markWorkerUnhealthy(worker)
+          } else {
+            markWorkerHealthy(worker)
+          }
           if (result.models) {
             worker.loadedModels = result.models
           }

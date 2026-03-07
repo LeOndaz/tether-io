@@ -43,11 +43,12 @@ const UsageRecordSchema = Type.Object({
 
 const WorkerInfo = Type.Object({
   workerId: Type.String(),
-  rpcPublicKey: Type.String(),
+  publicKey: Type.String(),
   healthy: Type.Boolean(),
   activeJobs: Type.Number(),
   streamUrl: Type.Union([Type.String(), Type.Null()]),
   loadedModels: Type.Array(Type.String()),
+  lastHealthCheck: Type.Number(),
 })
 
 const KeyIdParams = Type.Object({

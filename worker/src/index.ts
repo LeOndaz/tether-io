@@ -33,18 +33,7 @@ async function main() {
   )
   logger.info({ workerId: config.workerId, url: streamServer.url }, 'stream server ready')
 
-  // RPC server uses DHT for P2P communication
-  const bootstrap = config.dhtBootstrap
-    ? (() => {
-        const parts = config.dhtBootstrap.split(':')
-        const host = parts[0] ?? 'localhost'
-        const port = Number.parseInt(parts[1] ?? '49737', 10)
-        if (Number.isNaN(port) || port < 1 || port > 65535) {
-          throw new Error(`Invalid DHT_BOOTSTRAP port: ${parts[1]}`)
-        }
-        return [{ host, port }]
-      })()
-    : undefined
+  const bootstrap = config.dhtBootstrapNodes
 
   // DB replica — initialized lazily when the gateway sends its DB key
   const replica = new DbReplica('./storage/replica', bootstrap, logger)

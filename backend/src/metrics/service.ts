@@ -112,7 +112,7 @@ export class MetricsService {
 
     for (const model of Object.keys(byModel)) {
       const m = byModel[model] as ModelMetrics
-      m.avgLatencyMs = Math.round(m.totalLatency / m.requests)
+      m.avgLatencyMs = m.requests > 0 ? Math.round(m.totalLatency / m.requests) : 0
     }
 
     const byKey: Record<string, KeyMetrics> = {}
