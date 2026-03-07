@@ -3,7 +3,7 @@ import { create } from 'zustand'
 export interface LogEvent {
   type: string
   message: string
-  timestamp: string
+  timestamp: number
 }
 
 interface DeploymentsState {

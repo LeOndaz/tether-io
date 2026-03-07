@@ -347,22 +347,29 @@ export default function DeploymentsPage() {
                       const isExpanded = activeLogId === dep.id
                       return (
                         <div key={dep.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                          <button
-                            type="button"
-                            onClick={() => setActiveLog(isExpanded ? null : dep.id)}
+                          <div
                             style={{
-                              width: '100%',
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
                               padding: '10px 16px',
-                              cursor: 'pointer',
                               background: isExpanded ? '#f0f7ff' : 'transparent',
-                              border: 'none',
-                              fontSize: 'inherit',
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button
+                              type="button"
+                              onClick={() => setActiveLog(isExpanded ? null : dep.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                fontSize: 'inherit',
+                              }}
+                            >
                               <span style={{ fontSize: 12, color: '#9ca3af' }}>
                                 {isExpanded ? '▾' : '▸'}
                               </span>
@@ -381,16 +388,12 @@ export default function DeploymentsPage() {
                               <span style={{ fontSize: 13, color: '#6b7280' }}>
                                 {new Date(dep.createdAt).toLocaleString()}
                               </span>
-                            </div>
-                            <div
-                              style={{ display: 'flex', gap: 8 }}
-                              role="presentation"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
+                            </button>
+                            <div style={{ display: 'flex', gap: 8 }}>
                               {(dep.status === 'pending' || dep.status === 'pulling') && (
                                 <button
                                   type="button"
+                                  disabled={cancelMutation.isPending}
                                   onClick={() => cancelMutation.mutate(dep.id)}
                                   style={{
                                     padding: '4px 12px',
@@ -398,15 +401,17 @@ export default function DeploymentsPage() {
                                     color: '#f59e0b',
                                     border: '1px solid #f59e0b',
                                     borderRadius: 4,
-                                    cursor: 'pointer',
+                                    cursor: cancelMutation.isPending ? 'not-allowed' : 'pointer',
                                     background: 'none',
+                                    opacity: cancelMutation.isPending ? 0.5 : 1,
                                   }}
                                 >
-                                  Cancel
+                                  {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
                                 </button>
                               )}
                               <button
                                 type="button"
+                                disabled={deleteMutation.isPending}
                                 onClick={() => {
                                   if (confirm('Delete this deployment?'))
                                     deleteMutation.mutate(dep.id)
@@ -417,14 +422,15 @@ export default function DeploymentsPage() {
                                   color: '#dc2626',
                                   border: '1px solid #dc2626',
                                   borderRadius: 4,
-                                  cursor: 'pointer',
+                                  cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
                                   background: 'none',
+                                  opacity: deleteMutation.isPending ? 0.5 : 1,
                                 }}
                               >
-                                Delete
+                                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
                               </button>
                             </div>
-                          </button>
+                          </div>
 
                           {isExpanded && <LogPanel deploymentId={dep.id} />}
                         </div>

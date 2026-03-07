@@ -224,6 +224,7 @@ export default function ApiKeysPage() {
                 <td style={{ padding: '10px 12px' }}>
                   <button
                     type="button"
+                    disabled={deleteMutation.isPending}
                     onClick={() => {
                       if (confirm('Delete this key?')) deleteMutation.mutate(key.id)
                     }}
@@ -233,11 +234,12 @@ export default function ApiKeysPage() {
                       background: 'none',
                       border: '1px solid #dc2626',
                       borderRadius: 4,
-                      cursor: 'pointer',
+                      cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
                       fontSize: 13,
+                      opacity: deleteMutation.isPending ? 0.5 : 1,
                     }}
                   >
-                    Delete
+                    {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
                   </button>
                 </td>
               </tr>

@@ -5,7 +5,7 @@ export interface ApiKey {
   name: string
   prefix: string
   createdAt: number
-  lastUsedAt: number
+  lastUsedAt: number | null
 }
 
 export interface ApiKeyCreateResponse {
@@ -116,8 +116,23 @@ export const deploymentsApi = {
 }
 
 // Metrics
+export interface UsageRecord {
+  id: string
+  keyId: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  latencyMs: number
+  timestamp: number
+}
+
+export interface KeyUsageResponse {
+  keyId: string
+  records: UsageRecord[]
+}
+
 export const metricsApi = {
   get: () => request<Metrics>('/api/metrics'),
-  getByKey: (keyId: string) => request<Metrics>(`/api/metrics/keys/${keyId}`),
+  getByKey: (keyId: string) => request<KeyUsageResponse>(`/api/metrics/keys/${keyId}`),
   getWorkers: () => request<WorkersResponse>('/api/metrics/workers'),
 }
