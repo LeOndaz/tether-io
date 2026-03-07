@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
-import { deploymentsApi, keysApi } from '../../api/client'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+import { API_BASE, deploymentsApi } from '../../api/client'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -10,7 +8,6 @@ interface ChatMessage {
 }
 
 export default function PlaygroundPage() {
-  const { data: keys } = useQuery({ queryKey: ['keys'], queryFn: keysApi.list })
   const { data: deployments } = useQuery({
     queryKey: ['deployments'],
     queryFn: deploymentsApi.list,
@@ -21,7 +18,6 @@ export default function PlaygroundPage() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streaming, setStreaming] = useState(false)
-  const [_usage, setUsage] = useState<unknown>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const readyDeployments = deployments?.filter((d) => d.status === 'ready') || []
@@ -34,7 +30,6 @@ export default function PlaygroundPage() {
     setMessages(allMessages)
     setInput('')
     setStreaming(true)
-    setUsage(null)
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -64,6 +59,7 @@ export default function PlaygroundPage() {
       const reader = body.getReader()
       const decoder = new TextDecoder()
       let assistantContent = ''
+      let lineBuf = ''
 
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
@@ -71,10 +67,13 @@ export default function PlaygroundPage() {
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n').filter((l) => l.startsWith('data: '))
+        lineBuf += decoder.decode(value, { stream: true })
+        const lines = lineBuf.split('\n')
+        // Last element may be an incomplete line — keep it in the buffer
+        lineBuf = lines.pop() ?? ''
 
         for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
           const data = line.slice(6)
           if (data === '[DONE]') continue
 
@@ -94,9 +93,37 @@ export default function PlaygroundPage() {
           }
         }
       }
+
+      // Flush any remaining data in the line buffer
+      if (lineBuf.trim()) {
+        const remaining = lineBuf.trim()
+        if (remaining.startsWith('data: ') && remaining.slice(6) !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(remaining.slice(6))
+            const delta = parsed.choices?.[0]?.delta?.content as string | undefined
+            if (delta) {
+              assistantContent += delta
+              setMessages((prev) => {
+                const next = [...prev]
+                next[next.length - 1] = { role: 'assistant', content: assistantContent }
+                return next
+              })
+            }
+          } catch {
+            // Skip unparseable
+          }
+        }
+      }
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
-        setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${err.message}` }])
+        setMessages((prev) => {
+          // Remove the empty assistant placeholder if no content was streamed
+          const last = prev[prev.length - 1]
+          if (last?.role === 'assistant' && !last.content) {
+            return prev.slice(0, -1)
+          }
+          return prev
+        })
       }
     } finally {
       setStreaming(false)
@@ -109,23 +136,20 @@ export default function PlaygroundPage() {
       <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 16 }}>Inference Playground</h2>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <select
+        <input
+          type="password"
           value={selectedKey}
           onChange={(e) => setSelectedKey(e.target.value)}
+          placeholder="Paste API key (sk-...)"
           style={{
             padding: '8px 12px',
             border: '1px solid #d1d5db',
             borderRadius: 6,
             fontSize: 14,
+            width: 280,
+            fontFamily: 'monospace',
           }}
-        >
-          <option value="">Select API Key</option>
-          {keys?.map((k) => (
-            <option key={k.id} value={k.prefix}>
-              {k.name} ({k.prefix}...)
-            </option>
-          ))}
-        </select>
+        />
         <select
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value)}
@@ -147,7 +171,6 @@ export default function PlaygroundPage() {
           type="button"
           onClick={() => {
             setMessages([])
-            setUsage(null)
           }}
           style={{
             padding: '8px 16px',

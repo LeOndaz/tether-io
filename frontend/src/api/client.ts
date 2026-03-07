@@ -1,11 +1,11 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export interface ApiKey {
   id: string
   name: string
   prefix: string
-  createdAt: string
-  lastUsedAt: string | null
+  createdAt: number
+  lastUsedAt: number
 }
 
 export interface ApiKeyCreateResponse {
@@ -13,14 +13,19 @@ export interface ApiKeyCreateResponse {
   key: string
   name: string
   prefix: string
-  createdAt: string
+  createdAt: number
 }
 
 export interface Deployment {
   id: string
   model: string
   status: string
-  createdAt: string
+  verbose: boolean
+  contextWindow: number
+  temperature: number
+  maxTokens: number
+  createdAt: number
+  updatedAt: number
 }
 
 export interface ModelStats {
@@ -38,15 +43,20 @@ export interface Metrics {
   }
   last24h?: {
     totalRequests: number
+    totalInputTokens: number
+    totalOutputTokens: number
   }
   byModel?: Record<string, ModelStats>
 }
 
 export interface Worker {
   publicKey: string
+  workerId: string
   healthy: boolean
   activeJobs: number
-  loadedModels?: string[]
+  loadedModels: string[]
+  streamUrl: string | null
+  lastHealthCheck: number
 }
 
 export interface WorkersResponse {
@@ -96,7 +106,7 @@ export const keysApi = {
 export const deploymentsApi = {
   list: () => request<Deployment[]>('/api/deployments'),
   get: (id: string) => request<Deployment>(`/api/deployments/${id}`),
-  create: (data: { model: string }) =>
+  create: (data: { model: string; verbose?: boolean }) =>
     request<Deployment>('/api/deployments', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Partial<Deployment>) =>
     request<Deployment>(`/api/deployments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

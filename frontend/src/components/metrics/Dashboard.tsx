@@ -121,8 +121,8 @@ export default function Dashboard() {
                   outerRadius={80}
                   label
                 >
-                  {pieData.map((entry) => (
-                    <Cell key={entry.name} fill={COLORS[pieData.indexOf(entry) % COLORS.length]} />
+                  {pieData.map((entry, i) => (
+                    <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip />

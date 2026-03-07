@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keysApi } from '../../api/client'
 import { useKeysStore } from '../../stores/keys'
 
@@ -10,6 +10,11 @@ export default function ApiKeysPage() {
   const [name, setName] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // Clear the view-once key from memory when navigating away
+  useEffect(() => {
+    return () => clearNewKey()
+  }, [clearNewKey])
+
   const createMutation = useMutation({
     mutationFn: keysApi.create,
     onSuccess: (data) => {
@@ -19,9 +24,17 @@ export default function ApiKeysPage() {
     },
   })
 
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const deleteMutation = useMutation({
     mutationFn: keysApi.remove,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['keys'] }),
+    onSuccess: () => {
+      setDeleteError(null)
+      queryClient.invalidateQueries({ queryKey: ['keys'] })
+    },
+    onError: (err: Error) => {
+      setDeleteError(`Delete failed: ${err.message}`)
+    },
   })
 
   const handleCreate = (e: React.FormEvent) => {
@@ -85,6 +98,21 @@ export default function ApiKeysPage() {
           }}
         >
           {createMutation.error.message}
+        </div>
+      )}
+
+      {deleteError && (
+        <div
+          style={{
+            padding: 12,
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+            borderRadius: 6,
+            marginBottom: 16,
+            fontSize: 14,
+          }}
+        >
+          {deleteError}
         </div>
       )}
 
