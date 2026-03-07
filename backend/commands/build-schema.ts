@@ -1,8 +1,10 @@
-const Hyperschema = require('hyperschema')
-const HyperDB = require('hyperdb/builder')
+import { resolve } from 'node:path'
+import HyperDB from 'hyperdb/builder'
+import Hyperschema from 'hyperschema'
 
-const SCHEMA_DIR = __dirname + '/hyperschema'
-const DB_DIR = __dirname + '/hyperdb'
+const SPEC_DIR = resolve(import.meta.dirname, '../spec')
+const SCHEMA_DIR = resolve(SPEC_DIR, 'hyperschema')
+const DB_DIR = resolve(SPEC_DIR, 'hyperdb')
 
 // --- Schema definitions ---
 const schema = Hyperschema.from(SCHEMA_DIR)
@@ -77,7 +79,6 @@ dbNs.collections.register({
   key: ['id'],
 })
 
-// Index: lookup API key by hash (for auth validation)
 dbNs.indexes.register({
   name: 'apiKeys-by-hash',
   collection: '@aipaas/apiKeys',
@@ -85,7 +86,6 @@ dbNs.indexes.register({
   key: ['hash'],
 })
 
-// Index: lookup deployments by model name
 dbNs.indexes.register({
   name: 'deployments-by-model',
   collection: '@aipaas/deployments',
@@ -93,7 +93,6 @@ dbNs.indexes.register({
   key: ['model'],
 })
 
-// Index: lookup usage records by keyId
 dbNs.indexes.register({
   name: 'usageRecords-by-keyId',
   collection: '@aipaas/usageRecords',
@@ -101,7 +100,6 @@ dbNs.indexes.register({
   key: ['keyId'],
 })
 
-// Index: lookup usage records by model
 dbNs.indexes.register({
   name: 'usageRecords-by-model',
   collection: '@aipaas/usageRecords',

@@ -4,7 +4,7 @@
 /* eslint-disable quotes */
 /* eslint-disable space-before-function-paren */
 
-const { c } = require('hyperschema/runtime')
+import { c } from 'hyperschema/runtime'
 
 const VERSION = 1
 
@@ -208,13 +208,4 @@ function getStruct(name, v = VERSION) {
 
 const resolveStruct = getStruct // compat
 
-module.exports = {
-  resolveStruct,
-  getStruct,
-  getEnum,
-  getEncoding,
-  encode,
-  decode,
-  setVersion,
-  version
-}
+export { resolveStruct, getStruct, getEnum, getEncoding, encode, decode, setVersion, version }
