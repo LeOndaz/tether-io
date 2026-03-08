@@ -9,7 +9,7 @@ export function createCorsPlugin(config: AppConfig) {
       origin: config.frontendUrl ? [config.frontendUrl] : ['http://localhost:5173'],
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
       exposedHeaders: [
         'X-RateLimit-Limit',
         'X-RateLimit-Remaining',

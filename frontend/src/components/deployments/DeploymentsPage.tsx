@@ -473,7 +473,9 @@ export default function DeploymentsPage() {
                               {(dep.status === 'pending' || dep.status === 'pulling') && (
                                 <button
                                   type="button"
-                                  disabled={cancelMutation.isPending}
+                                  disabled={
+                                    cancelMutation.isPending && cancelMutation.variables === dep.id
+                                  }
                                   onClick={() => cancelMutation.mutate(dep.id)}
                                   style={{
                                     padding: '4px 12px',
@@ -481,17 +483,29 @@ export default function DeploymentsPage() {
                                     color: '#f59e0b',
                                     border: '1px solid #f59e0b',
                                     borderRadius: 4,
-                                    cursor: cancelMutation.isPending ? 'not-allowed' : 'pointer',
+                                    cursor:
+                                      cancelMutation.isPending &&
+                                      cancelMutation.variables === dep.id
+                                        ? 'not-allowed'
+                                        : 'pointer',
                                     background: 'none',
-                                    opacity: cancelMutation.isPending ? 0.5 : 1,
+                                    opacity:
+                                      cancelMutation.isPending &&
+                                      cancelMutation.variables === dep.id
+                                        ? 0.5
+                                        : 1,
                                   }}
                                 >
-                                  {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+                                  {cancelMutation.isPending && cancelMutation.variables === dep.id
+                                    ? 'Cancelling...'
+                                    : 'Cancel'}
                                 </button>
                               )}
                               <button
                                 type="button"
-                                disabled={deleteMutation.isPending}
+                                disabled={
+                                  deleteMutation.isPending && deleteMutation.variables === dep.id
+                                }
                                 onClick={() => {
                                   if (confirm('Delete this deployment?'))
                                     deleteMutation.mutate(dep.id)
@@ -502,12 +516,20 @@ export default function DeploymentsPage() {
                                   color: '#dc2626',
                                   border: '1px solid #dc2626',
                                   borderRadius: 4,
-                                  cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
+                                  cursor:
+                                    deleteMutation.isPending && deleteMutation.variables === dep.id
+                                      ? 'not-allowed'
+                                      : 'pointer',
                                   background: 'none',
-                                  opacity: deleteMutation.isPending ? 0.5 : 1,
+                                  opacity:
+                                    deleteMutation.isPending && deleteMutation.variables === dep.id
+                                      ? 0.5
+                                      : 1,
                                 }}
                               >
-                                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                                {deleteMutation.isPending && deleteMutation.variables === dep.id
+                                  ? 'Deleting...'
+                                  : 'Delete'}
                               </button>
                             </div>
                           </div>

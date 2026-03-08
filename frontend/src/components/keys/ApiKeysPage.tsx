@@ -231,25 +231,31 @@ export default function ApiKeysPage() {
                   {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : 'Never'}
                 </td>
                 <td style={{ padding: '10px 12px' }}>
-                  <button
-                    type="button"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (confirm('Delete this key?')) deleteMutation.mutate(key.id)
-                    }}
-                    style={{
-                      padding: '4px 12px',
-                      color: '#dc2626',
-                      background: 'none',
-                      border: '1px solid #dc2626',
-                      borderRadius: 4,
-                      cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
-                      fontSize: 13,
-                      opacity: deleteMutation.isPending ? 0.5 : 1,
-                    }}
-                  >
-                    {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-                  </button>
+                  {(() => {
+                    const isDeleting =
+                      deleteMutation.isPending && deleteMutation.variables === key.id
+                    return (
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={() => {
+                          if (confirm('Delete this key?')) deleteMutation.mutate(key.id)
+                        }}
+                        style={{
+                          padding: '4px 12px',
+                          color: '#dc2626',
+                          background: 'none',
+                          border: '1px solid #dc2626',
+                          borderRadius: 4,
+                          cursor: isDeleting ? 'not-allowed' : 'pointer',
+                          fontSize: 13,
+                          opacity: isDeleting ? 0.5 : 1,
+                        }}
+                      >
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    )
+                  })()}
                 </td>
               </tr>
             ))}

@@ -82,9 +82,15 @@ export function createInferenceRoutes(
   authMiddleware: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function inferenceRoutes(fastify) {
+    const csrfIfSession = (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
+      if (req.headers.authorization?.startsWith('Bearer ')) return done()
+      fastify.csrfProtection(req, reply, done)
+    }
+
     fastify.post<{ Body: ChatCompletionsBodyType }>(
       '/v1/chat/completions',
       {
+        onRequest: csrfIfSession,
         preHandler: [authMiddleware],
         schema: {
           tags: ['Inference'],
