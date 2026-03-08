@@ -221,6 +221,13 @@ async function handleStreamingResponse(
 
   let promptTokens = 0
   let completionTokens = 0
+  let jobReleased = false
+
+  function releaseOnce() {
+    if (jobReleased) return
+    jobReleased = true
+    dispatcher.releaseJob(workerKey)
+  }
 
   async function* proxyStream() {
     // biome-ignore lint/style/noNonNullAssertion: body is guaranteed non-null by the guard above
@@ -230,7 +237,14 @@ async function handleStreamingResponse(
 
     try {
       while (true) {
-        const { done, value } = await reader.read()
+        let readResult: ReadableStreamReadResult<Uint8Array>
+        try {
+          readResult = await reader.read()
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') break
+          throw err
+        }
+        const { done, value } = readResult
         if (done) break
         if (!reply.sse.isConnected) {
           reader.cancel().catch(() => {})
@@ -258,8 +272,25 @@ async function handleStreamingResponse(
           }
         }
       }
+
+      // Flush remaining data in line buffer
+      if (lineBuf.startsWith('data: ')) {
+        const payload = lineBuf.slice(6)
+        if (payload !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(payload)
+            if (parsed.usage) {
+              promptTokens = parsed.usage.prompt_tokens ?? 0
+              completionTokens = parsed.usage.completion_tokens ?? 0
+            }
+            yield { data: parsed }
+          } catch {
+            // skip unparseable
+          }
+        }
+      }
     } finally {
-      dispatcher.releaseJob(workerKey)
+      releaseOnce()
 
       const latencyMs = Date.now() - startTime
       metricsService
@@ -276,5 +307,11 @@ async function handleStreamingResponse(
     }
   }
 
-  await reply.sse.send(proxyStream())
+  try {
+    await reply.sse.send(proxyStream())
+  } finally {
+    // Safety net: release the job if the generator was never entered
+    // (e.g., client disconnected before iteration started).
+    releaseOnce()
+  }
 }
