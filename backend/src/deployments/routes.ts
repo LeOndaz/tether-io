@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
-import { createPermissionGuard } from '../auth/middleware'
+import { requireAdmin } from '../auth/middleware'
 import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError, ValidationError } from '../shared/errors'
 import { createCsrfIfSession } from '../shared/middleware/csrf'
@@ -58,13 +58,12 @@ export function createDeploymentRoutes(
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
     const csrfIfSession = createCsrfIfSession(fastify)
-    const adminGuard = createPermissionGuard('admin')
 
     fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
       '/api/deployments',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware, adminGuard],
+        preHandler: [authMiddleware, requireAdmin],
         schema: {
           tags: ['Deployments'],
           description: 'Deploy a model to worker nodes',
@@ -119,7 +118,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware, adminGuard],
+        preHandler: [authMiddleware, requireAdmin],
         schema: {
           tags: ['Deployments'],
           description: 'Update deployment configuration',
@@ -141,7 +140,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware, adminGuard],
+        preHandler: [authMiddleware, requireAdmin],
         schema: {
           tags: ['Deployments'],
           description: 'Delete a deployment',
@@ -162,7 +161,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id/cancel',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware, adminGuard],
+        preHandler: [authMiddleware, requireAdmin],
         schema: {
           tags: ['Deployments'],
           description: 'Cancel an in-progress deployment',
