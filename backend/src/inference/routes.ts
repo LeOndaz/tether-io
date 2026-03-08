@@ -3,9 +3,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import type { AuthMiddleware } from '../auth/types'
+import type { AppConfig } from '../config/index'
 import type { DeploymentService } from '../deployments/service'
 import type { MetricsService } from '../metrics/service'
 import { NotFoundError, ValidationError } from '../shared/errors'
+import { createCsrfIfSession } from '../shared/middleware/csrf'
 import type { Dispatcher } from '../workers/dispatcher'
 import { WorkerUnavailableError } from '../workers/errors'
 
@@ -22,8 +24,8 @@ const ChatMessage = Type.Object({
 
 const ChatCompletionsBody = Type.Object(
   {
-    model: Type.String(),
-    messages: Type.Array(ChatMessage, { maxItems: 256 }),
+    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:\\\\-/]{1,128}$' }),
+    messages: Type.Array(ChatMessage, { minItems: 1, maxItems: 256 }),
     stream: Type.Optional(Type.Boolean({ default: false })),
     temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
     max_tokens: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -80,12 +82,10 @@ export function createInferenceRoutes(
   metricsService: MetricsService,
   deploymentService: DeploymentService,
   authMiddleware: AuthMiddleware,
+  config: AppConfig,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function inferenceRoutes(fastify) {
-    const csrfIfSession = (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
-      if (req.headers.authorization?.startsWith('Bearer ')) return done()
-      fastify.csrfProtection(req, reply, done)
-    }
+    const csrfIfSession = createCsrfIfSession(fastify)
 
     fastify.post<{ Body: ChatCompletionsBodyType }>(
       '/v1/chat/completions',
@@ -104,10 +104,6 @@ export function createInferenceRoutes(
       async (request, reply: FastifyReply) => {
         const { model, messages, stream, temperature, max_tokens } = request.body
 
-        if (!messages || messages.length === 0) {
-          throw new ValidationError('messages array must not be empty')
-        }
-
         // Validate that the model has an active deployment
         const deployments = await deploymentService.getByModel(model)
         const hasReady = deployments.some((d) => d.status === 'ready')
@@ -121,7 +117,7 @@ export function createInferenceRoutes(
           if (!reply.sse) {
             throw new ValidationError('Streaming requires Accept: text/event-stream header')
           }
-          return handleStreamingResponse(request, reply, dispatcher, metricsService, {
+          return handleStreamingResponse(request, reply, dispatcher, metricsService, config, {
             model,
             messages,
             temperature,
@@ -188,6 +184,7 @@ async function handleStreamingResponse(
   reply: FastifyReply,
   dispatcher: Dispatcher,
   metricsService: MetricsService,
+  config: AppConfig,
   params: StreamingParams,
 ): Promise<void> {
   const { model, messages, temperature, max_tokens, startTime } = params
@@ -209,9 +206,16 @@ async function handleStreamingResponse(
 
   let workerResponse: Response
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    }
+    if (config.workerSecret) {
+      headers['x-worker-secret'] = config.workerSecret
+    }
     workerResponse = await fetch(`${selected.streamUrl}/stream/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      headers,
       body: JSON.stringify({ model, messages, options: { temperature, max_tokens } }),
       signal: abort.signal,
     })
@@ -258,6 +262,14 @@ async function handleStreamingResponse(
         }
 
         lineBuf += decoder.decode(value, { stream: true })
+
+        // Guard against a malicious worker sending an unbounded line to OOM the gateway
+        if (lineBuf.length > 1_048_576) {
+          request.log.error('SSE proxy lineBuf exceeded 1MB — aborting stream')
+          reader.cancel().catch(() => {})
+          break
+        }
+
         const lines = lineBuf.split('\n')
         // Last element may be an incomplete line — keep it in the buffer
         lineBuf = lines.pop() ?? ''

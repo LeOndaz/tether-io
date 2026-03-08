@@ -1,8 +1,10 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import { createPermissionGuard } from '../auth/middleware'
 import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError, ValidationError } from '../shared/errors'
+import { createCsrfIfSession } from '../shared/middleware/csrf'
 import type { DeploymentService } from './service'
 
 const CreateDeploymentBody = Type.Object(
@@ -25,10 +27,19 @@ const UpdateDeploymentBody = Type.Object(
   { additionalProperties: false },
 )
 
+const DeploymentStatus = Type.Union([
+  Type.Literal('pending'),
+  Type.Literal('pulling'),
+  Type.Literal('ready'),
+  Type.Literal('failed'),
+  Type.Literal('removing'),
+  Type.Literal('cancelled'),
+])
+
 const DeploymentResponse = Type.Object({
   id: Type.String(),
   model: Type.String(),
-  status: Type.String(),
+  status: DeploymentStatus,
   verbose: Type.Boolean(),
   contextWindow: Type.Integer(),
   temperature: Type.Number(),
@@ -46,17 +57,14 @@ export function createDeploymentRoutes(
   authMiddleware: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
-    // CSRF protection for session-authenticated users; API key users are exempt.
-    const csrfIfSession = (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
-      if (req.headers.authorization?.startsWith('Bearer ')) return done()
-      fastify.csrfProtection(req, reply, done)
-    }
+    const csrfIfSession = createCsrfIfSession(fastify)
+    const adminGuard = createPermissionGuard('admin')
 
     fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
       '/api/deployments',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware],
+        preHandler: [authMiddleware, adminGuard],
         schema: {
           tags: ['Deployments'],
           description: 'Deploy a model to worker nodes',
@@ -111,7 +119,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware],
+        preHandler: [authMiddleware, adminGuard],
         schema: {
           tags: ['Deployments'],
           description: 'Update deployment configuration',
@@ -133,7 +141,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware],
+        preHandler: [authMiddleware, adminGuard],
         schema: {
           tags: ['Deployments'],
           description: 'Delete a deployment',
@@ -154,7 +162,7 @@ export function createDeploymentRoutes(
       '/api/deployments/:id/cancel',
       {
         onRequest: csrfIfSession,
-        preHandler: [authMiddleware],
+        preHandler: [authMiddleware, adminGuard],
         schema: {
           tags: ['Deployments'],
           description: 'Cancel an in-progress deployment',

@@ -50,11 +50,14 @@ export class DeploymentService {
   private cancelledDeployments = new Set<string>()
   private createLocks = new Map<string, Promise<void>>()
   private cleanupTimers = new Map<string, NodeJS.Timeout>()
+  private activePulls = new Set<Promise<void>>()
+  private activeSyncs = new Set<Promise<void>>()
 
   constructor(
     private db: HyperDB,
     private dispatcher: Dispatcher,
     private logger: pino.Logger,
+    private workerSecret = '',
   ) {}
 
   /**
@@ -73,12 +76,13 @@ export class DeploymentService {
       () => {},
     )
     this.createLocks.set(params.model, settled)
-    // Clean up lock once no further creates are chained
-    settled.then(() => {
-      if (this.createLocks.get(params.model) === settled) {
-        this.createLocks.delete(params.model)
-      }
-    })
+    settled
+      .then(() => {
+        if (this.createLocks.get(params.model) === settled) {
+          this.createLocks.delete(params.model)
+        }
+      })
+      .catch(() => {})
     return operation
   }
 
@@ -140,9 +144,11 @@ export class DeploymentService {
     await this.db.insert(DEPLOYMENTS_COLLECTION, deployment as unknown as Record<string, unknown>)
     await this.db.flush()
 
-    this.pullModel(id, model, deployment.verbose).catch((err) => {
+    const pullPromise = this.pullModel(id, model, deployment.verbose).catch((err) => {
       this.logger.error({ err, deploymentId: id }, 'unexpected pullModel error')
     })
+    this.activePulls.add(pullPromise)
+    pullPromise.finally(() => this.activePulls.delete(pullPromise))
 
     return deployment
   }
@@ -190,6 +196,7 @@ export class DeploymentService {
     const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
     if (!existing) return false
 
+    this.cancelledDeployments.add(id)
     await this.updateStatus(id, 'removing')
 
     const otherDeployments = await this.getByModel(existing.model)
@@ -207,8 +214,6 @@ export class DeploymentService {
         )
       }
     }
-
-    this.cancelledDeployments.add(id)
     await this.db.delete(DEPLOYMENTS_COLLECTION, { id })
     await this.db.flush()
     this.cleanupBuffers(id)
@@ -300,8 +305,9 @@ export class DeploymentService {
     this.cleanupTimers.clear()
   }
 
-  destroy(): void {
+  async destroy(): Promise<void> {
     this.clearAllTimers()
+    await Promise.allSettled([...this.activePulls, ...this.activeSyncs])
   }
 
   /** Waits for at least one healthy worker, retrying briefly for discovery to complete. */
@@ -369,9 +375,11 @@ export class DeploymentService {
       if (anySuccess) {
         if (this.cancelledDeployments.has(deploymentId)) return
         await this.updateStatus(deploymentId, 'ready')
-        this.syncWorkerModels().catch((err) => {
+        const syncPromise = this.syncWorkerModels().catch((err) => {
           this.logger.warn({ err }, 'syncWorkerModels failed after successful deployment')
         })
+        this.activeSyncs.add(syncPromise)
+        syncPromise.finally(() => this.activeSyncs.delete(syncPromise))
         this.emitLog(deploymentId, {
           type: 'status',
           message: 'Model deployed successfully',
@@ -417,9 +425,16 @@ export class DeploymentService {
           timestamp: Date.now(),
         })
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        }
+        if (this.workerSecret) {
+          headers['x-worker-secret'] = this.workerSecret
+        }
         const response = await fetch(`${worker.streamUrl}/stream/pull`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          headers,
           body: JSON.stringify({ model }),
         })
 
@@ -442,6 +457,17 @@ export class DeploymentService {
           if (!verbose) continue
 
           lineBuf += decoder.decode(value, { stream: true })
+
+          // Guard against a malicious worker sending an unbounded line to OOM the gateway
+          if (lineBuf.length > 1_048_576) {
+            this.logger.error(
+              { workerId: worker.workerId },
+              'SSE pull lineBuf exceeded 1MB — aborting stream',
+            )
+            reader.cancel().catch(() => {})
+            break
+          }
+
           const lines = lineBuf.split('\n')
           lineBuf = lines.pop() ?? ''
 
@@ -501,6 +527,7 @@ export class DeploymentService {
   }
 
   private async updateStatus(id: string, status: DeploymentStatus): Promise<void> {
+    if (status !== 'removing' && this.cancelledDeployments.has(id)) return
     const existing = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
     if (!existing) return
 

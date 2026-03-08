@@ -48,7 +48,7 @@ await fastify.register(createAuthRoutes(userService))
 await fastify.register(createKeyRoutes(keyService, sessionAuth))
 await fastify.register(createDeploymentRoutes(deploymentService, compositeAuth))
 await fastify.register(
-  createInferenceRoutes(dispatcher, metricsService, deploymentService, compositeAuth),
+  createInferenceRoutes(dispatcher, metricsService, deploymentService, compositeAuth, config),
 )
 await fastify.register(createMetricsRoutes(metricsService, dispatcher, sessionAuth))
 await fastify.register(createWorkerRoutes(dispatcher, sessionAuth))
@@ -85,7 +85,7 @@ const shutdown = async () => {
   } catch (err) {
     logger.error({ err }, 'error closing fastify')
   }
-  deploymentService.destroy()
+  await deploymentService.destroy()
   await container.shutdown()
   process.exit(0)
 }
