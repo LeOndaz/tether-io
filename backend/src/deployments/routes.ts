@@ -1,10 +1,9 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
-import { requireAdmin } from '../auth/middleware'
+import { createCsrfIfSession, requireAdmin } from '../auth/middleware'
 import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError, ValidationError } from '../shared/errors'
-import { createCsrfIfSession } from '../shared/middleware/csrf'
 import type { DeploymentService } from './service'
 
 const CreateDeploymentBody = Type.Object(

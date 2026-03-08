@@ -1,6 +1,14 @@
-import type { FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { AuthError } from '../shared/errors'
 import type { AuthMiddleware, AuthProvider } from './types'
+
+/** CSRF protection that only applies to session-authenticated requests. API key users are exempt. */
+export function createCsrfIfSession(fastify: FastifyInstance) {
+  return (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
+    if (req.headers.authorization?.startsWith('Bearer sk-')) return done()
+    fastify.csrfProtection(req, reply, done)
+  }
+}
 
 /** Try each provider in order. First non-null principal wins. */
 export function createCompositeAuth(providers: AuthProvider[]): AuthMiddleware {
