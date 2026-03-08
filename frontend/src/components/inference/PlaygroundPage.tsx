@@ -39,6 +39,7 @@ export default function PlaygroundPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
           Authorization: `Bearer ${selectedKey}`,
         },
         body: JSON.stringify({
@@ -79,6 +80,9 @@ export default function PlaygroundPage() {
 
           try {
             const parsed = JSON.parse(data)
+            if (parsed.error) {
+              throw new Error(parsed.error.message ?? parsed.error)
+            }
             const delta = parsed.choices?.[0]?.delta?.content as string | undefined
             if (delta) {
               assistantContent += delta
@@ -88,8 +92,8 @@ export default function PlaygroundPage() {
                 return next
               })
             }
-          } catch {
-            // Skip unparseable
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message) throw parseErr
           }
         }
       }
@@ -116,13 +120,16 @@ export default function PlaygroundPage() {
       }
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') {
+        const errorMsg = err.message || 'Unknown error'
         setMessages((prev) => {
-          // Remove the empty assistant placeholder if no content was streamed
           const last = prev[prev.length - 1]
+          // Replace empty assistant placeholder with error, or append error
           if (last?.role === 'assistant' && !last.content) {
-            return prev.slice(0, -1)
+            const next = [...prev]
+            next[next.length - 1] = { role: 'assistant', content: `Error: ${errorMsg}` }
+            return next
           }
-          return prev
+          return [...prev, { role: 'assistant', content: `Error: ${errorMsg}` }]
         })
       }
     } finally {

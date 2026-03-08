@@ -1,8 +1,59 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deploymentsApi } from '../../api/client'
 import { useSSE } from '../../hooks/useSSE'
 import { type LogEvent, useDeploymentsStore } from '../../stores/deployments'
+
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  const handleCopy = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      try {
+        await navigator.clipboard.writeText(text)
+        setState('copied')
+      } catch {
+        // Fallback for insecure contexts
+        try {
+          const area = document.createElement('textarea')
+          area.value = text
+          area.style.position = 'fixed'
+          area.style.opacity = '0'
+          document.body.appendChild(area)
+          area.select()
+          document.execCommand('copy')
+          document.body.removeChild(area)
+          setState('copied')
+        } catch {
+          setState('failed')
+        }
+      }
+      setTimeout(() => setState('idle'), 1500)
+    },
+    [text],
+  )
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`Copy ${label}`}
+      style={{
+        padding: '2px 6px',
+        fontSize: 11,
+        color: state === 'copied' ? '#10b981' : state === 'failed' ? '#ef4444' : '#9ca3af',
+        border: '1px solid #374151',
+        borderRadius: 4,
+        cursor: 'pointer',
+        background: state === 'copied' ? '#064e3b' : 'transparent',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {state === 'copied' ? 'Copied!' : state === 'failed' ? 'Failed' : label}
+    </button>
+  )
+}
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#f59e0b',
@@ -47,16 +98,21 @@ function LogPanel({ deploymentId }: { deploymentId: string }) {
   const [reversed, setReversed] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const entries = logs[deploymentId] || []
+  const allEntries = logs[deploymentId] || []
 
+  // Buffer keeps up to 1000 entries; logLimit controls display only
+  const entries = allEntries.length > logLimit ? allEntries.slice(-logLimit) : allEntries
   const displayedLogs = reversed ? [...entries].reverse() : entries
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new entries only
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new entries / settings change
   useEffect(() => {
-    if (autoScroll && !reversed && scrollRef.current) {
+    if (!autoScroll || !scrollRef.current) return
+    if (reversed) {
+      scrollRef.current.scrollTop = 0
+    } else {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [entries.length, autoScroll, reversed])
+  }, [allEntries.length, autoScroll, reversed, logLimit])
 
   return (
     <div style={{ padding: '0 16px 12px', backgroundColor: '#111827' }}>
@@ -119,8 +175,16 @@ function LogPanel({ deploymentId }: { deploymentId: string }) {
             </option>
           ))}
         </select>
+        <CopyButton
+          text={displayedLogs
+            .map((log) => `[${new Date(log.timestamp).toLocaleTimeString()}] ${log.message}`)
+            .join('\n')}
+          label="Copy logs"
+        />
         <span style={{ fontSize: 11, color: '#4b5563', marginLeft: 'auto' }}>
-          {entries.length} logs
+          {entries.length === allEntries.length
+            ? `${entries.length} logs`
+            : `${entries.length}/${allEntries.length} logs`}
         </span>
       </div>
       <div
@@ -308,29 +372,35 @@ export default function DeploymentsPage() {
                   overflow: 'hidden',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.model)}
+                <div
                   style={{
-                    width: '100%',
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '12px 16px',
                     background: '#f9fafb',
-                    border: 'none',
                     borderBottom: isCollapsed ? 'none' : '1px solid #e5e7eb',
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    fontWeight: 600,
+                    gap: 8,
                   }}
                 >
-                  <span>
-                    <span style={{ marginRight: 8 }}>{isCollapsed ? '▸' : '▾'}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.model)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: 15,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>{isCollapsed ? '▸' : '▾'}</span>
                     {group.model}
                     <span
                       style={{
-                        marginLeft: 12,
                         fontSize: 12,
                         fontWeight: 400,
                         color: '#6b7280',
@@ -338,8 +408,9 @@ export default function DeploymentsPage() {
                     >
                       {readyCount}/{totalCount} ready
                     </span>
-                  </span>
-                </button>
+                  </button>
+                  <CopyButton text={group.model} label="Copy name" />
+                </div>
 
                 {!isCollapsed && (
                   <div style={{ display: 'grid', gap: 0 }}>
