@@ -1,26 +1,22 @@
 import type { LBStrategy, WorkerInfo } from '../dispatcher'
+import { LeastConnectionsStrategy } from './least-connections'
 
 export class ModelAffinityStrategy implements LBStrategy {
+  private fallback = new LeastConnectionsStrategy()
+
   select(workers: WorkerInfo[], request: unknown): WorkerInfo | null {
     if (workers.length === 0) return null
 
     const model = (request as { model?: string })?.model
-    if (!model) return workers[0] as WorkerInfo
+    if (!model) return this.fallback.select(workers, request)
 
     // Prefer workers that already have the model loaded
     const withModel = workers.filter((w) => w.loadedModels?.includes(model))
     if (withModel.length > 0) {
-      // Among workers with the model, pick the one with least active jobs
-      return withModel.reduce(
-        (min, w) => (w.activeJobs < min.activeJobs ? w : min),
-        withModel[0] as WorkerInfo,
-      )
+      return this.fallback.select(withModel, request)
     }
 
-    // Fall back to least connections if no worker has the model
-    return workers.reduce(
-      (min, w) => (w.activeJobs < min.activeJobs ? w : min),
-      workers[0] as WorkerInfo,
-    )
+    // No worker has the model — fall back to least connections
+    return this.fallback.select(workers, request)
   }
 }
