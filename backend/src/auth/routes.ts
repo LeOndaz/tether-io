@@ -35,9 +35,11 @@ export function createAuthRoutes(
         const user = await userService.validateCredentials(username, password)
         if (!user) throw new AuthError('Invalid username or password')
 
-        // Regenerate session to prevent fixation — clear any pre-existing
-        // session data before binding the new identity.
-        request.session.delete()
+        // Clear stale session data before binding the new identity.
+        // regenerate() wipes all keys but keeps deleted=false, so subsequent
+        // set() calls are serialized into the response cookie. delete() would
+        // mark the session for destruction, silently discarding set() writes.
+        request.session.regenerate()
         request.session.set('userId', user.id)
         request.session.set('username', user.username)
         request.session.set('permissions', user.permissions)
