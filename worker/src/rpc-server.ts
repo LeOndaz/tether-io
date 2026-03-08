@@ -1,7 +1,7 @@
 import RPC from '@hyperswarm/rpc'
 import DHT from 'hyperdht'
-import type { WorkerConfig } from './config'
 import type pino from 'pino'
+import type { WorkerConfig } from './config'
 import type { ModelRuntime } from './runtime/interface'
 
 interface RpcBootstrapOptions {

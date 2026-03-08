@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import fastifySSE from '@fastify/sse'
 import Fastify from 'fastify'
-import { type Static, Type } from 'typebox'
 import type pino from 'pino'
+import { type Static, Type } from 'typebox'
 import type { ModelRuntime } from './runtime/interface'
 
 const StreamChatBody = Type.Object({
