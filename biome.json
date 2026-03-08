@@ -4,8 +4,10 @@
     "ignore": [
       "backend/spec/hyperdb/",
       "backend/spec/hyperschema/",
+      "backend/dist/",
       "worker/spec/hyperdb/",
-      "worker/spec/hyperschema/"
+      "worker/spec/hyperschema/",
+      "worker/dist/"
     ]
   },
   "organizeImports": {

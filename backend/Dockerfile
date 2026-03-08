@@ -12,6 +12,9 @@ COPY . .
 
 RUN pnpm build
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+USER appuser
+
 EXPOSE 3000
 
 CMD ["node", "dist/server.js"]
