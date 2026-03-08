@@ -1,8 +1,23 @@
 import crypto from 'node:crypto'
+import type DHT from 'hyperdht'
 import Hyperswarm from 'hyperswarm'
 import type { SwarmConnection } from 'hyperswarm'
 import type pino from 'pino'
 import type { Dispatcher, WorkerRegistration } from './dispatcher'
+
+/** Validates a worker-provided streamUrl to prevent SSRF attacks. */
+export function isValidStreamUrl(url: string): boolean {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return false
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false
+    if (hostname === '169.254.169.254') return false
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Discovers workers via Hyperswarm topic.
@@ -25,7 +40,7 @@ export class WorkerDiscovery {
 
   constructor(
     private dispatcher: Dispatcher,
-    private dht: unknown,
+    private dht: DHT,
     private clusterTopic: string,
     private logger: pino.Logger,
     private dbKey: Buffer,
@@ -65,6 +80,14 @@ export class WorkerDiscovery {
         if (!identity.workerId || !identity.rpcPublicKey) {
           this.logger.warn({ peerKey: peerHex }, 'peer sent invalid identity')
           return
+        }
+
+        if (identity.streamUrl && !isValidStreamUrl(identity.streamUrl)) {
+          this.logger.warn(
+            { workerId: identity.workerId, streamUrl: identity.streamUrl },
+            'worker provided invalid streamUrl — registering without it',
+          )
+          identity.streamUrl = undefined
         }
 
         this.connections.set(identity.rpcPublicKey, connection)

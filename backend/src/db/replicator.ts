@@ -1,4 +1,5 @@
 import type Hypercore from 'hypercore'
+import type DHT from 'hyperdht'
 import Hyperswarm from 'hyperswarm'
 import type pino from 'pino'
 
@@ -13,7 +14,7 @@ export class DbReplicator {
 
   constructor(
     private core: Hypercore,
-    private dht: unknown,
+    private dht: DHT,
     private logger: pino.Logger,
   ) {}
 
