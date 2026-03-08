@@ -30,11 +30,14 @@ export const useDeploymentsStore = create<DeploymentsState>((set) => ({
   appendLog: (deploymentId, event) => {
     set((state) => {
       const existing = state.logs[deploymentId] || []
-      const updated = [...existing, event]
+      const needsTrim = existing.length >= MAX_BUFFER
+      const updated = needsTrim
+        ? [...existing.slice(-(MAX_BUFFER - 1)), event]
+        : [...existing, event]
       return {
         logs: {
           ...state.logs,
-          [deploymentId]: updated.length > MAX_BUFFER ? updated.slice(-MAX_BUFFER) : updated,
+          [deploymentId]: updated,
         },
       }
     })

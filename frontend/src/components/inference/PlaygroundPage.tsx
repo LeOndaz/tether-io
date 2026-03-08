@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 import { API_BASE, deploymentsApi } from '../../api/client'
+import { useAuthStore } from '../../stores/auth'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -41,6 +42,11 @@ export default function PlaygroundPage() {
       }
       if (apiKeyOverride) {
         headers.Authorization = `Bearer ${apiKeyOverride}`
+      } else {
+        const csrfToken = useAuthStore.getState().user?.csrfToken
+        if (csrfToken) {
+          headers['x-csrf-token'] = csrfToken
+        }
       }
       const response = await fetch(`${API_BASE}/v1/chat/completions`, {
         method: 'POST',

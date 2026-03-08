@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import { authApi } from './api/client'
 import DeploymentsPage from './components/deployments/DeploymentsPage'
@@ -6,6 +6,57 @@ import PlaygroundPage from './components/inference/PlaygroundPage'
 import ApiKeysPage from './components/keys/ApiKeysPage'
 import Dashboard from './components/metrics/Dashboard'
 import { useAuthStore } from './stores/auth'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            fontFamily: 'system-ui, sans-serif',
+            gap: 16,
+          }}
+        >
+          <p style={{ fontSize: 18, color: '#374151' }}>Something went wrong</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 20px',
+              fontSize: 14,
+              backgroundColor: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
@@ -231,8 +282,13 @@ export default function App() {
   if (!user) return <LoginForm />
 
   const handleLogout = async () => {
-    await authApi.logout()
-    setUser(null)
+    try {
+      await authApi.logout()
+    } catch {
+      // Clear local state regardless of server error
+    } finally {
+      setUser(null)
+    }
   }
 
   return (
@@ -290,12 +346,14 @@ export default function App() {
         </div>
       </nav>
       <main style={{ flex: 1, padding: 32, backgroundColor: '#f9fafb' }}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/keys" element={<ApiKeysPage />} />
-          <Route path="/deployments" element={<DeploymentsPage />} />
-          <Route path="/playground" element={<PlaygroundPage />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/keys" element={<ApiKeysPage />} />
+            <Route path="/deployments" element={<DeploymentsPage />} />
+            <Route path="/playground" element={<PlaygroundPage />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   )
