@@ -3,6 +3,7 @@ import DeploymentsPage from './components/deployments/DeploymentsPage'
 import PlaygroundPage from './components/inference/PlaygroundPage'
 import ApiKeysPage from './components/keys/ApiKeysPage'
 import Dashboard from './components/metrics/Dashboard'
+import { useAuthStore } from './stores/auth'
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
@@ -12,6 +13,10 @@ const navItems = [
 ]
 
 export default function App() {
+  const apiKey = useAuthStore((s) => s.apiKey)
+  const setApiKey = useAuthStore((s) => s.setApiKey)
+  const clearApiKey = useAuthStore((s) => s.clearApiKey)
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
       <nav
@@ -46,6 +51,43 @@ export default function App() {
             {item.label}
           </NavLink>
         ))}
+        <div style={{ marginTop: 'auto', padding: '16px 20px', borderTop: '1px solid #374151' }}>
+          <label
+            htmlFor="global-api-key"
+            style={{ fontSize: 11, color: '#9ca3af', display: 'block', marginBottom: 6 }}
+          >
+            API Key
+          </label>
+          <input
+            id="global-api-key"
+            type="password"
+            value={apiKey || ''}
+            onChange={(e) => (e.target.value ? setApiKey(e.target.value) : clearApiKey())}
+            placeholder="sk-..."
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: 12,
+              fontFamily: 'monospace',
+              border: '1px solid #374151',
+              borderRadius: 4,
+              backgroundColor: '#1f2937',
+              color: '#f9fafb',
+              boxSizing: 'border-box',
+            }}
+          />
+          {apiKey && (
+            <div
+              style={{
+                fontSize: 11,
+                color: '#34d399',
+                marginTop: 4,
+              }}
+            >
+              {apiKey.slice(0, 7)}...
+            </div>
+          )}
+        </div>
       </nav>
       <main style={{ flex: 1, padding: 32, backgroundColor: '#f9fafb' }}>
         <Routes>

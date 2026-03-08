@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { NotFoundError, ValidationError } from '../shared/errors'
@@ -42,14 +42,17 @@ const IdParams = Type.Object({
 
 export function createDeploymentRoutes(
   deploymentService: DeploymentService,
+  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
     fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
       '/api/deployments',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'Deploy a model to worker nodes',
+          security: [{ bearerAuth: [] }],
           body: CreateDeploymentBody,
           response: { 201: DeploymentResponse },
         },
@@ -64,9 +67,11 @@ export function createDeploymentRoutes(
     fastify.get(
       '/api/deployments',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'List all deployments',
+          security: [{ bearerAuth: [] }],
           response: { 200: Type.Array(DeploymentResponse) },
         },
       },
@@ -78,9 +83,11 @@ export function createDeploymentRoutes(
     fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           params: IdParams,
+          security: [{ bearerAuth: [] }],
           response: { 200: DeploymentResponse },
         },
       },
@@ -95,10 +102,12 @@ export function createDeploymentRoutes(
     fastify.patch<{ Params: Static<typeof IdParams>; Body: Static<typeof UpdateDeploymentBody> }>(
       '/api/deployments/:id',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'Update deployment configuration',
           params: IdParams,
+          security: [{ bearerAuth: [] }],
           body: UpdateDeploymentBody,
           response: { 200: DeploymentResponse },
         },
@@ -114,10 +123,12 @@ export function createDeploymentRoutes(
     fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'Delete a deployment',
           params: IdParams,
+          security: [{ bearerAuth: [] }],
           response: { 204: Type.Null() },
         },
       },
@@ -132,10 +143,12 @@ export function createDeploymentRoutes(
     fastify.post<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id/cancel',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'Cancel an in-progress deployment',
           params: IdParams,
+          security: [{ bearerAuth: [] }],
           response: { 200: Type.Object({ status: Type.String() }) },
         },
       },
@@ -152,10 +165,12 @@ export function createDeploymentRoutes(
     fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id/logs',
       {
+        preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
           description: 'Stream deployment logs via SSE',
           params: IdParams,
+          security: [{ bearerAuth: [] }],
         },
         sse: true,
       },

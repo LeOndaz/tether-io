@@ -161,11 +161,11 @@ export class DeploymentService {
   /** Backfill defaults for fields added after initial schema (guards against old DB records). */
   private normalize(record: DeploymentRecord): DeploymentRecord {
     return {
-      verbose: false,
-      contextWindow: 4096,
-      temperature: 0.7,
-      maxTokens: 2048,
       ...record,
+      verbose: record.verbose ?? false,
+      contextWindow: record.contextWindow ?? 4096,
+      temperature: record.temperature ?? 0.7,
+      maxTokens: record.maxTokens ?? 2048,
     }
   }
 

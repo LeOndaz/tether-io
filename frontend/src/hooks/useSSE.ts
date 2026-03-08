@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { getApiKey } from '../stores/auth'
 
 export function useSSE<T>(
   url: string | null,
@@ -6,7 +7,7 @@ export function useSSE<T>(
   enabled = true,
   onDone?: () => void,
 ) {
-  const sourceRef = useRef<EventSource | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
   const onMessageRef = useRef(onMessage)
   const onDoneRef = useRef(onDone)
   onMessageRef.current = onMessage
@@ -19,42 +20,69 @@ export function useSSE<T>(
   useEffect(() => {
     if (!enabled || !url) return
 
-    const source = new EventSource(url)
-    sourceRef.current = source
+    const controller = new AbortController()
+    abortRef.current = controller
 
-    source.onmessage = (event) => {
+    const headers: Record<string, string> = {
+      Accept: 'text/event-stream',
+    }
+    const apiKey = getApiKey()
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`
+    }
+    ;(async () => {
       try {
-        const data = JSON.parse(event.data) as T
-        stableOnMessage(data)
-      } catch {
-        // Ignore unparseable messages
-      }
-    }
+        const response = await fetch(url, {
+          headers,
+          signal: controller.signal,
+        })
 
-    source.onerror = () => {
-      // We unconditionally close on any error to prevent infinite reconnect
-      // loops to endpoints that close intentionally (e.g., deployment logs
-      // after terminal state). The trade-off: transient network errors
-      // (laptop sleep/wake, WiFi blip) also kill the connection permanently.
-      // A production fix would distinguish transient errors from intentional
-      // server close (e.g., via readyState check or retry with max attempts
-      // and exponential backoff), but that adds complexity for edge cases
-      // that don't affect the demo flow.
-      source.close()
-      sourceRef.current = null
-      onDoneRef.current?.()
-    }
+        if (!response.ok || !response.body) {
+          onDoneRef.current?.()
+          return
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let lineBuf = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          lineBuf += decoder.decode(value, { stream: true })
+          const lines = lineBuf.split('\n')
+          lineBuf = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              stableOnMessage(JSON.parse(data) as T)
+            } catch {
+              // Skip unparseable
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+      } finally {
+        abortRef.current = null
+        onDoneRef.current?.()
+      }
+    })()
 
     return () => {
-      source.close()
-      sourceRef.current = null
+      controller.abort()
+      abortRef.current = null
     }
   }, [url, enabled, stableOnMessage])
 
   return {
     close: () => {
-      sourceRef.current?.close()
-      sourceRef.current = null
+      abortRef.current?.abort()
+      abortRef.current = null
     },
   }
 }
