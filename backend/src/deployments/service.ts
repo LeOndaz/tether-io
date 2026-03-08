@@ -148,12 +148,25 @@ export class DeploymentService {
   }
 
   async getById(id: string): Promise<DeploymentRecord | null> {
-    return this.db.get(DEPLOYMENTS_COLLECTION, { id }) as Promise<DeploymentRecord | null>
+    const record = (await this.db.get(DEPLOYMENTS_COLLECTION, { id })) as DeploymentRecord | null
+    return record ? this.normalize(record) : null
   }
 
   async list(): Promise<DeploymentRecord[]> {
     const stream = this.db.find(DEPLOYMENTS_COLLECTION, {})
-    return stream.toArray() as Promise<DeploymentRecord[]>
+    const records = (await stream.toArray()) as DeploymentRecord[]
+    return records.map((r) => this.normalize(r))
+  }
+
+  /** Backfill defaults for fields added after initial schema (guards against old DB records). */
+  private normalize(record: DeploymentRecord): DeploymentRecord {
+    return {
+      verbose: false,
+      contextWindow: 4096,
+      temperature: 0.7,
+      maxTokens: 2048,
+      ...record,
+    }
   }
 
   async update(id: string, updates: UpdateDeploymentParams): Promise<DeploymentRecord | null> {
@@ -456,7 +469,7 @@ export class DeploymentService {
                 throw new Error(event.message ?? 'unknown worker error')
               }
             } catch (parseErr) {
-              if (parseErr instanceof Error && parseErr.message !== 'unknown worker error') {
+              if (parseErr instanceof SyntaxError) {
                 // Skip unparseable SSE lines
               } else {
                 throw parseErr

@@ -23,6 +23,10 @@ export class OllamaRuntime extends ModelRuntime {
   async pull(model: string, onProgress?: (progress: PullProgress) => void): Promise<void> {
     const stream = await this.client.pull({ model, stream: true })
     for await (const event of stream) {
+      // Ollama streams errors as data events (HTTP 200), not as HTTP errors
+      if ('error' in event && event.error) {
+        throw new Error(String(event.error))
+      }
       if (onProgress) {
         onProgress({
           status: event.status,
