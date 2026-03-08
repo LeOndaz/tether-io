@@ -7,6 +7,7 @@ import type { ModelRuntime } from './runtime/interface'
 interface RpcBootstrapOptions {
   bootstrap?: Array<{ host: string; port: number }>
   logger: Logger
+  dht?: DHT
 }
 
 interface RpcServerResult {
@@ -19,9 +20,12 @@ export async function createRpcServer(
   runtime: ModelRuntime,
   rpcOpts: RpcBootstrapOptions,
 ): Promise<RpcServerResult> {
-  const { logger, ...dhtOpts } = rpcOpts
-  const dht = new DHT({ ...dhtOpts, firewalled: false })
-  await dht.ready()
+  const { logger, dht: externalDht, ...dhtOpts } = rpcOpts
+  const ownsDht = !externalDht
+  const dht = externalDht ?? new DHT({ ...dhtOpts, firewalled: false })
+  if (ownsDht) {
+    await dht.ready()
+  }
   logger.info({ firewalled: dht.firewalled }, 'DHT ready')
   const rpc = new RPC({ dht })
   const server = rpc.createServer()
@@ -106,7 +110,9 @@ export async function createRpcServer(
   const shutdown = async () => {
     await server.close()
     await rpc.destroy()
-    await dht.destroy()
+    if (ownsDht) {
+      await dht.destroy()
+    }
   }
 
   return { publicKey, shutdown }

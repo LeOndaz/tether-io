@@ -1,3 +1,4 @@
+import type DHT from 'hyperdht'
 import Hyperswarm from 'hyperswarm'
 import type { SwarmConnection } from 'hyperswarm'
 import type { Logger } from './logger'
@@ -10,7 +11,7 @@ interface AnnounceIdentity {
 
 interface AnnounceConfig {
   topicBuffer: Buffer
-  dhtBootstrap?: Array<{ host: string; port: number }>
+  dht?: DHT
 }
 
 /**
@@ -24,7 +25,6 @@ interface AnnounceConfig {
  * to force immediate DHT re-discovery rather than waiting for the refresh cycle.
  */
 export class WorkerAnnouncer {
-  private dht: unknown = null
   private swarm: Hyperswarm | null = null
   private connections = new Set<SwarmConnection>()
   private rejoinTimer: NodeJS.Timeout | null = null
@@ -39,12 +39,8 @@ export class WorkerAnnouncer {
   async start(): Promise<void> {
     const opts: Record<string, unknown> = {}
 
-    if (this.config.dhtBootstrap) {
-      const DHT = (await import('hyperdht')).default
-      const dht = new DHT({ bootstrap: this.config.dhtBootstrap, firewalled: false })
-      await dht.ready()
-      this.dht = dht
-      opts.dht = dht
+    if (this.config.dht) {
+      opts.dht = this.config.dht
     }
 
     this.swarm = new Hyperswarm(opts)
@@ -135,10 +131,6 @@ export class WorkerAnnouncer {
     if (this.swarm) {
       await this.swarm.destroy()
       this.swarm = null
-    }
-    if (this.dht && typeof (this.dht as { destroy?: () => Promise<void> }).destroy === 'function') {
-      await (this.dht as { destroy: () => Promise<void> }).destroy()
-      this.dht = null
     }
   }
 }

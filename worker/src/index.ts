@@ -1,3 +1,4 @@
+import DHT from 'hyperdht'
 import { loadWorkerConfig } from './config'
 import { DbReplica } from './db/replica'
 import { WorkerAnnouncer } from './discovery'
@@ -30,16 +31,22 @@ async function main() {
     config.streamPort,
     config.streamHost,
     logger,
+    config.workerSecret,
   )
   logger.info({ workerId: config.workerId, url: streamServer.url }, 'stream server ready')
 
   const bootstrap = config.dhtBootstrapNodes
 
+  // Single DHT instance shared between RPC server and discovery
+  const dht = new DHT({ bootstrap, firewalled: false })
+  await dht.ready()
+  logger.info({ firewalled: dht.firewalled }, 'shared DHT ready')
+
   // DB replica — initialized lazily when the gateway sends its DB key
   const replica = new DbReplica('./storage/replica', bootstrap, logger)
 
   const { publicKey, shutdown: shutdownRpc } = await createRpcServer(config, runtime, {
-    bootstrap,
+    dht,
     logger,
   })
   const rpcPublicKeyHex = publicKey.toString('hex')
@@ -57,7 +64,7 @@ async function main() {
     },
     {
       topicBuffer: config.clusterTopicBuffer,
-      dhtBootstrap: bootstrap,
+      dht,
     },
     logger,
     async (dbKeyHex) => {
@@ -83,6 +90,7 @@ async function main() {
     await shutdownRpc()
     await streamServer.shutdown()
     await replica.shutdown()
+    await dht.destroy()
     process.exit(0)
   }
 
