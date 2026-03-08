@@ -4,7 +4,7 @@
 import { IndexEncoder, c, b4a } from 'hyperdb/runtime'
 import { version, getEncoding, setVersion } from './messages.js'
 
-const versions = { schema: version, db: 1 }
+const versions = { schema: version, db: 2 }
 
 // '@aipaas/apiKeys' collection key
 const collection0_key = new IndexEncoder([
@@ -177,7 +177,7 @@ function collection2_reconstruct_key (keyBuf) {
 const collection2 = {
   name: '@aipaas/usageRecords',
   id: 2,
-  version: 1,
+  version: 2,
   encodeKey (record) {
     const key = [record.id]
     return collection2_key.encode(key)
@@ -381,6 +381,52 @@ const index6 = {
 }
 collection2.indexes.push(index6)
 
+// '@aipaas/usageRecords-by-timestamp' collection key
+const index7_key = new IndexEncoder([
+  IndexEncoder.UINT,
+  IndexEncoder.STRING
+], { prefix: 7 })
+
+function index7_indexify (record) {
+  const arr = []
+
+  const a0 = record.timestamp
+  if (a0 === undefined) return arr
+  arr.push(a0)
+
+  const a1 = record.id
+  if (a1 === undefined) return arr
+  arr.push(a1)
+
+  return arr
+}
+
+// '@aipaas/usageRecords-by-timestamp'
+const index7 = {
+  name: '@aipaas/usageRecords-by-timestamp',
+  version: 2,
+  id: 7,
+  encodeKey (record) {
+    return index7_key.encode(index7_indexify(record))
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return index7_key.encodeRange({
+      gt: gt ? index7_indexify(gt) : null,
+      lt: lt ? index7_indexify(lt) : null,
+      gte: gte ? index7_indexify(gte) : null,
+      lte: lte ? index7_indexify(lte) : null
+    })
+  },
+  encodeValue: (record) => index7.collection.encodeKey(record),
+  encodeIndexKeys (record, context) {
+    return [index7_key.encode([record.timestamp, record.id])]
+  },
+  reconstruct: (keyBuf, valueBuf) => valueBuf,
+  offset: collection2.indexes.length,
+  collection: collection2
+}
+collection2.indexes.push(index7)
+
 const collections = [
   collection0,
   collection1,
@@ -391,7 +437,8 @@ const indexes = [
   index3,
   index4,
   index5,
-  index6
+  index6,
+  index7
 ]
 
 export default { versions, collections, indexes, resolveCollection, resolveIndex }
@@ -411,6 +458,7 @@ function resolveIndex (name) {
     case '@aipaas/deployments-by-model': return index4
     case '@aipaas/usageRecords-by-keyId': return index5
     case '@aipaas/usageRecords-by-model': return index6
+    case '@aipaas/usageRecords-by-timestamp': return index7
     default: return null
   }
 }

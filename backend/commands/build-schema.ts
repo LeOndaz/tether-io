@@ -107,6 +107,13 @@ dbNs.indexes.register({
   key: ['model'],
 })
 
+dbNs.indexes.register({
+  name: 'usageRecords-by-timestamp',
+  collection: '@aipaas/usageRecords',
+  unique: false,
+  key: ['timestamp'],
+})
+
 HyperDB.toDisk(db, DB_DIR, { esm: true })
 
 console.log('Schema and DB definitions built successfully')

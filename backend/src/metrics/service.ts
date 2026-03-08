@@ -1,6 +1,11 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import { USAGE_BY_KEY_ID_INDEX, USAGE_BY_MODEL_INDEX, USAGE_RECORDS_COLLECTION } from './schema'
+import {
+  USAGE_BY_KEY_ID_INDEX,
+  USAGE_BY_MODEL_INDEX,
+  USAGE_BY_TIMESTAMP_INDEX,
+  USAGE_RECORDS_COLLECTION,
+} from './schema'
 
 export interface UsageRecord {
   id: string
@@ -88,18 +93,32 @@ export class MetricsService {
   }
 
   async getAggregatedMetrics(): Promise<AggregatedMetrics> {
-    const allRecords = await this.getAllUsage()
     const now = Date.now()
     const oneHourAgo = now - 60 * 60 * 1000
     const oneDayAgo = now - 24 * 60 * 60 * 1000
 
-    // Only process records from the last 24h — older data is irrelevant for this view
-    const records = allRecords.filter((r) => r.timestamp > oneDayAgo)
-    const recentRecords = records.filter((r) => r.timestamp > oneHourAgo)
-    const dailyRecords = records
-
+    const lastHour: PeriodMetrics = { totalRequests: 0, totalInputTokens: 0, totalOutputTokens: 0 }
+    const last24h: PeriodMetrics = { totalRequests: 0, totalInputTokens: 0, totalOutputTokens: 0 }
     const byModel: Record<string, ModelMetrics> = {}
-    for (const r of dailyRecords) {
+    const byKey: Record<string, KeyMetrics> = {}
+
+    // Range query on timestamp index — only reads records from the last 24h
+    // instead of scanning the entire usage history.
+    const records = (await this.db
+      .find(USAGE_BY_TIMESTAMP_INDEX, { gte: { timestamp: oneDayAgo } })
+      .toArray()) as unknown as UsageRecord[]
+
+    for (const r of records) {
+      last24h.totalRequests++
+      last24h.totalInputTokens += r.inputTokens
+      last24h.totalOutputTokens += r.outputTokens
+
+      if (r.timestamp > oneHourAgo) {
+        lastHour.totalRequests++
+        lastHour.totalInputTokens += r.inputTokens
+        lastHour.totalOutputTokens += r.outputTokens
+      }
+
       if (!byModel[r.model]) {
         byModel[r.model] = { requests: 0, inputTokens: 0, outputTokens: 0, totalLatency: 0 }
       }
@@ -108,15 +127,7 @@ export class MetricsService {
       m.inputTokens += r.inputTokens
       m.outputTokens += r.outputTokens
       m.totalLatency += r.latencyMs
-    }
 
-    for (const model of Object.keys(byModel)) {
-      const m = byModel[model] as ModelMetrics
-      m.avgLatencyMs = m.requests > 0 ? Math.round(m.totalLatency / m.requests) : 0
-    }
-
-    const byKey: Record<string, KeyMetrics> = {}
-    for (const r of dailyRecords) {
       if (!byKey[r.keyId]) {
         byKey[r.keyId] = { requests: 0, inputTokens: 0, outputTokens: 0 }
       }
@@ -126,19 +137,11 @@ export class MetricsService {
       k.outputTokens += r.outputTokens
     }
 
-    return {
-      lastHour: {
-        totalRequests: recentRecords.length,
-        totalInputTokens: recentRecords.reduce((sum, r) => sum + r.inputTokens, 0),
-        totalOutputTokens: recentRecords.reduce((sum, r) => sum + r.outputTokens, 0),
-      },
-      last24h: {
-        totalRequests: dailyRecords.length,
-        totalInputTokens: dailyRecords.reduce((sum, r) => sum + r.inputTokens, 0),
-        totalOutputTokens: dailyRecords.reduce((sum, r) => sum + r.outputTokens, 0),
-      },
-      byModel,
-      byKey,
+    for (const model of Object.keys(byModel)) {
+      const m = byModel[model] as ModelMetrics
+      m.avgLatencyMs = m.requests > 0 ? Math.round(m.totalLatency / m.requests) : 0
     }
+
+    return { lastHour, last24h, byModel, byKey }
   }
 }
