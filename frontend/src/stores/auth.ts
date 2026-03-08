@@ -4,6 +4,7 @@ export interface SessionUser {
   id: string
   username: string
   permissions: string
+  csrfToken?: string
 }
 
 interface AuthState {

@@ -44,6 +44,7 @@ export function createKeyRoutes(
     fastify.post<{ Body: Static<typeof CreateKeyBody> }>(
       '/api/keys',
       {
+        onRequest: fastify.csrfProtection,
         preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],
@@ -138,6 +139,7 @@ export function createKeyRoutes(
     fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/keys/:id',
       {
+        onRequest: fastify.csrfProtection,
         preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],

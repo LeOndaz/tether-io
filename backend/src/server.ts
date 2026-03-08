@@ -1,3 +1,4 @@
+import fastifyCsrf from '@fastify/csrf-protection'
 import fastifySSE from '@fastify/sse'
 import Fastify from 'fastify'
 import { createAuthRoutes } from './auth/routes'
@@ -8,7 +9,6 @@ import { createInferenceRoutes } from './inference/routes'
 import { createKeyRoutes } from './keys/routes'
 import { createMetricsRoutes } from './metrics/routes'
 import { createCorsPlugin } from './shared/plugins/cors'
-import { createCsrfPlugin } from './shared/plugins/csrf'
 import { errorHandlerPlugin } from './shared/plugins/error-handler'
 import { createSecureSessionPlugin } from './shared/plugins/secure-session'
 import { createSwaggerPlugin } from './shared/plugins/swagger'
@@ -36,12 +36,10 @@ const fastify = Fastify({
 
 // Register plugins
 await fastify.register(createCorsPlugin(config))
-await fastify.register(
-  createCsrfPlugin(config.frontendUrl ? [config.frontendUrl] : ['http://localhost:5173']),
-)
 await fastify.register(errorHandlerPlugin)
 await fastify.register(fastifySSE)
 await fastify.register(createSecureSessionPlugin(config.session))
+await fastify.register(fastifyCsrf, { sessionPlugin: '@fastify/secure-session' })
 await fastify.register(createSwaggerPlugin(config))
 
 // Register routes — services injected from container

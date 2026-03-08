@@ -9,10 +9,11 @@ const LoginBody = Type.Object({
   password: Type.String({ minLength: 1 }),
 })
 
-const MeResponse = Type.Object({
+const AuthResponse = Type.Object({
   id: Type.String(),
   username: Type.String(),
   permissions: Type.String(),
+  csrfToken: Type.String(),
 })
 
 export function createAuthRoutes(
@@ -26,10 +27,10 @@ export function createAuthRoutes(
           tags: ['Auth'],
           description: 'Log in with username and password',
           body: LoginBody,
-          response: { 200: MeResponse },
+          response: { 200: AuthResponse },
         },
       },
-      async (request, _reply: FastifyReply) => {
+      async (request, reply: FastifyReply) => {
         const { username, password } = request.body
         const user = await userService.validateCredentials(username, password)
         if (!user) throw new AuthError('Invalid username or password')
@@ -41,13 +42,16 @@ export function createAuthRoutes(
         request.session.set('username', user.username)
         request.session.set('permissions', user.permissions)
 
-        return { id: user.id, username: user.username, permissions: user.permissions }
+        const csrfToken = reply.generateCsrf()
+
+        return { id: user.id, username: user.username, permissions: user.permissions, csrfToken }
       },
     )
 
     fastify.post(
       '/auth/logout',
       {
+        onRequest: fastify.csrfProtection,
         schema: {
           tags: ['Auth'],
           description: 'Log out and destroy session',
@@ -66,17 +70,19 @@ export function createAuthRoutes(
         schema: {
           tags: ['Auth'],
           description: 'Get current session user',
-          response: { 200: MeResponse },
+          response: { 200: AuthResponse },
         },
       },
-      async (request) => {
+      async (request, reply: FastifyReply) => {
         const userId = request.session?.get('userId')
         if (!userId) throw new AuthError('Not logged in')
 
         const user = await userService.getById(userId)
         if (!user) throw new AuthError('Session invalid')
 
-        return { id: user.id, username: user.username, permissions: user.permissions }
+        const csrfToken = reply.generateCsrf()
+
+        return { id: user.id, username: user.username, permissions: user.permissions, csrfToken }
       },
     )
   }

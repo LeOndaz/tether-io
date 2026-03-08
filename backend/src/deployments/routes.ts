@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import type { AuthMiddleware } from '../auth/types'
@@ -46,9 +46,16 @@ export function createDeploymentRoutes(
   authMiddleware: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
+    // CSRF protection for session-authenticated users; API key users are exempt.
+    const csrfIfSession = (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
+      if (req.headers.authorization?.startsWith('Bearer ')) return done()
+      fastify.csrfProtection(req, reply, done)
+    }
+
     fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
       '/api/deployments',
       {
+        onRequest: csrfIfSession,
         preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
@@ -103,6 +110,7 @@ export function createDeploymentRoutes(
     fastify.patch<{ Params: Static<typeof IdParams>; Body: Static<typeof UpdateDeploymentBody> }>(
       '/api/deployments/:id',
       {
+        onRequest: csrfIfSession,
         preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
@@ -124,6 +132,7 @@ export function createDeploymentRoutes(
     fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id',
       {
+        onRequest: csrfIfSession,
         preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],
@@ -144,6 +153,7 @@ export function createDeploymentRoutes(
     fastify.post<{ Params: Static<typeof IdParams> }>(
       '/api/deployments/:id/cancel',
       {
+        onRequest: csrfIfSession,
         preHandler: [authMiddleware],
         schema: {
           tags: ['Deployments'],

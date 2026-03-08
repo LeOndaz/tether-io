@@ -1,4 +1,4 @@
-import type { SessionUser } from '../stores/auth'
+import { type SessionUser, useAuthStore } from '../stores/auth'
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -83,6 +83,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (options.body) {
     headers['Content-Type'] = 'application/json'
+  }
+  const csrfToken = useAuthStore.getState().user?.csrfToken
+  if (csrfToken && options.method && options.method !== 'GET') {
+    headers['x-csrf-token'] = csrfToken
   }
 
   const response = await fetch(url, { ...options, headers, credentials: 'include' })
