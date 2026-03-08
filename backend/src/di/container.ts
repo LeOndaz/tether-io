@@ -1,8 +1,12 @@
-import type { FastifyReply, FastifyRequest } from 'fastify'
 import type Hypercore from 'hypercore'
 import type { HyperDB } from 'hyperdb'
 import type DHT from 'hyperdht'
 import type pino from 'pino'
+import { ApiKeyAuthProvider } from '../auth/api-key-provider'
+import { createCompositeAuth, createProviderAuth } from '../auth/middleware'
+import { SessionAuthProvider } from '../auth/session-provider'
+import type { AuthMiddleware } from '../auth/types'
+import { EnvUserService, type UserService } from '../auth/user-service'
 import type { AppConfig } from '../config/index'
 import { loadConfig } from '../config/index'
 import { createDatabase } from '../db/index'
@@ -11,7 +15,6 @@ import { DeploymentService } from '../deployments/service'
 import { KeyService } from '../keys/service'
 import { createLogger } from '../logger'
 import { MetricsService } from '../metrics/service'
-import { createAuthMiddleware } from '../middleware/auth'
 import { WorkerDiscovery } from '../workers/discovery'
 import { createDHT, createDispatcher } from '../workers/dispatcher'
 import type { Dispatcher } from '../workers/dispatcher'
@@ -27,7 +30,9 @@ export class Container {
   keyService!: KeyService
   deploymentService!: DeploymentService
   metricsService!: MetricsService
-  authMiddleware!: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  userService!: UserService
+  compositeAuth!: AuthMiddleware
+  sessionAuth!: AuthMiddleware
 
   private dht!: DHT
   private dbCore!: Hypercore
@@ -60,7 +65,12 @@ export class Container {
     this.deploymentService = new DeploymentService(this.db, this.dispatcher, this.logger)
     this.metricsService = new MetricsService(this.db)
 
-    this.authMiddleware = createAuthMiddleware(this.keyService, this.config.rateLimit)
+    // Auth providers — composable, injectable, replaceable
+    this.userService = new EnvUserService(this.config.admin.username, this.config.admin.password)
+    const apiKeyProvider = new ApiKeyAuthProvider(this.keyService, this.config.rateLimit)
+    const sessionProvider = new SessionAuthProvider()
+    this.compositeAuth = createCompositeAuth([apiKeyProvider, sessionProvider])
+    this.sessionAuth = createProviderAuth(sessionProvider)
 
     this.logger.info(
       { dbKey: this.dbCore.key.toString('hex').slice(0, 16) },

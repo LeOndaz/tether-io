@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { keysApi } from '../../api/client'
-import { useAuthStore } from '../../stores/auth'
 import { useKeysStore } from '../../stores/keys'
 
 export default function ApiKeysPage() {
@@ -172,44 +171,23 @@ export default function ApiKeysPage() {
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (newKeyValue) useAuthStore.getState().setApiKey(newKeyValue)
-                  clearNewKey()
-                  setCopied(false)
-                }}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                Use as active key
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  clearNewKey()
-                  setCopied(false)
-                }}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  backgroundColor: '#f3f4f6',
-                  border: '1px solid #d1d5db',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                Close
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                clearNewKey()
+                setCopied(false)
+              }}
+              style={{
+                width: '100%',
+                padding: 10,
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

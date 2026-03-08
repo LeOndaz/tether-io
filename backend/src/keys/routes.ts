@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError } from '../shared/errors'
 import type { KeyService } from './service'
 
@@ -37,14 +38,17 @@ const IdParams = Type.Object({
 
 export function createKeyRoutes(
   keyService: KeyService,
+  sessionAuth: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function keyRoutes(fastify) {
     fastify.post<{ Body: Static<typeof CreateKeyBody> }>(
       '/api/keys',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],
           description: 'Create a new API key. The full key is returned only once.',
+          security: [{ cookieAuth: [] }],
           body: CreateKeyBody,
           response: {
             201: CreateKeyResponse,
@@ -68,9 +72,11 @@ export function createKeyRoutes(
     fastify.get(
       '/api/keys',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],
           description: 'List all API keys (prefix only, never full key)',
+          security: [{ cookieAuth: [] }],
           response: {
             200: Type.Array(KeyListItem),
           },
@@ -103,10 +109,12 @@ export function createKeyRoutes(
     fastify.get<{ Params: Static<typeof IdParams> }>(
       '/api/keys/:id',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],
           description: 'Get API key details by ID',
           params: IdParams,
+          security: [{ cookieAuth: [] }],
           response: { 200: KeyDetail },
         },
       },
@@ -130,9 +138,11 @@ export function createKeyRoutes(
     fastify.delete<{ Params: Static<typeof IdParams> }>(
       '/api/keys/:id',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['API Keys'],
           params: IdParams,
+          security: [{ cookieAuth: [] }],
           response: { 204: Type.Null() },
         },
       },

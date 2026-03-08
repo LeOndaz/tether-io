@@ -12,6 +12,12 @@ export const GatewayEnvSchema = Type.Object({
   RATE_LIMIT_REQUESTS_PER_MIN: Type.String(),
   RATE_LIMIT_TOKENS_PER_HOUR: Type.String(),
 
+  // Session auth
+  SESSION_SECRET: Type.String(),
+  SESSION_SALT: Type.String(),
+  ADMIN_USERNAME: Type.String(),
+  ADMIN_PASSWORD: Type.String(),
+
   // Optional with defaults applied in loadConfig()
   NODE_ENV: Type.Optional(Type.String()),
   LOG_LEVEL: Type.Optional(Type.String()),

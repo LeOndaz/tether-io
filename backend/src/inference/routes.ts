@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import type { AuthMiddleware } from '../auth/types'
 import type { DeploymentService } from '../deployments/service'
 import type { MetricsService } from '../metrics/service'
 import { NotFoundError, ValidationError } from '../shared/errors'
@@ -78,7 +79,7 @@ export function createInferenceRoutes(
   dispatcher: Dispatcher,
   metricsService: MetricsService,
   deploymentService: DeploymentService,
-  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
+  authMiddleware: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function inferenceRoutes(fastify) {
     fastify.post<{ Body: ChatCompletionsBodyType }>(
@@ -124,7 +125,13 @@ export function createInferenceRoutes(
         }
 
         const result = await dispatchInference(dispatcher, model, messages, temperature, max_tokens)
-        await recordUsage(metricsService, request.apiKey.id, model, result, startTime)
+        await recordUsage(
+          metricsService,
+          request.principal?.id ?? 'unknown',
+          model,
+          result,
+          startTime,
+        )
         return buildCompletionResponse(model, result)
       },
     )
@@ -257,7 +264,7 @@ async function handleStreamingResponse(
       const latencyMs = Date.now() - startTime
       metricsService
         .recordUsage({
-          keyId: request.apiKey.id,
+          keyId: request.principal?.id ?? 'unknown',
           model,
           inputTokens: promptTokens,
           outputTokens: completionTokens,

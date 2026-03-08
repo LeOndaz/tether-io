@@ -13,11 +13,23 @@ export interface RateLimitConfig {
   tokensPerHour: number
 }
 
+export interface SessionConfig {
+  secret: string
+  salt: string
+}
+
+export interface AdminConfig {
+  username: string
+  password: string
+}
+
 export interface AppConfig {
   port: number
   host: string
   logLevel: string
   rateLimit: RateLimitConfig
+  session: SessionConfig
+  admin: AdminConfig
   dhtBootstrap: string | null
   dhtBootstrapNodes: DhtBootstrapNode[] | undefined
   clusterTopic: string
@@ -48,6 +60,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     )
   }
 
+  if (parsed.SESSION_SECRET.length < 32) {
+    throw new Error('SESSION_SECRET must be at least 32 characters')
+  }
+  if (parsed.SESSION_SALT.length !== 16) {
+    throw new Error('SESSION_SALT must be exactly 16 characters')
+  }
+
   const dhtBootstrap = parsed.DHT_BOOTSTRAP ?? null
 
   return {
@@ -55,6 +74,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     host: parsed.HOST,
     logLevel: parsed.LOG_LEVEL ?? 'info',
     rateLimit: { requestsPerMin, tokensPerHour },
+    session: { secret: parsed.SESSION_SECRET, salt: parsed.SESSION_SALT },
+    admin: { username: parsed.ADMIN_USERNAME, password: parsed.ADMIN_PASSWORD },
     dhtBootstrap,
     dhtBootstrapNodes: parseDhtBootstrap(dhtBootstrap),
     clusterTopic: parsed.CLUSTER_TOPIC ?? DEFAULT_CLUSTER_TOPIC,

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import type { AuthMiddleware } from '../auth/types'
 import type { Dispatcher } from '../workers/dispatcher'
 import type { MetricsService } from './service'
 
@@ -58,14 +59,17 @@ const KeyIdParams = Type.Object({
 export function createMetricsRoutes(
   metricsService: MetricsService,
   dispatcher: Dispatcher,
+  sessionAuth: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function metricsRoutes(fastify) {
     fastify.get(
       '/api/metrics',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['Metrics'],
           description: 'Get aggregated usage metrics',
+          security: [{ cookieAuth: [] }],
           response: { 200: AggregatedMetricsResponse },
         },
       },
@@ -77,9 +81,11 @@ export function createMetricsRoutes(
     fastify.get<{ Params: Static<typeof KeyIdParams> }>(
       '/api/metrics/keys/:keyId',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['Metrics'],
           description: 'Get usage records for a specific API key',
+          security: [{ cookieAuth: [] }],
           params: KeyIdParams,
           response: {
             200: Type.Object({
@@ -99,9 +105,11 @@ export function createMetricsRoutes(
     fastify.get(
       '/api/metrics/workers',
       {
+        preHandler: [sessionAuth],
         schema: {
           tags: ['Metrics'],
           description: 'Get worker status information',
+          security: [{ cookieAuth: [] }],
           response: {
             200: Type.Object({ workers: Type.Array(WorkerInfo) }),
           },

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { getApiKey } from '../stores/auth'
 
 export function useSSE<T>(
   url: string | null,
@@ -22,18 +21,11 @@ export function useSSE<T>(
 
     const controller = new AbortController()
     abortRef.current = controller
-
-    const headers: Record<string, string> = {
-      Accept: 'text/event-stream',
-    }
-    const apiKey = getApiKey()
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`
-    }
     ;(async () => {
       try {
         const response = await fetch(url, {
-          headers,
+          headers: { Accept: 'text/event-stream' },
+          credentials: 'include',
           signal: controller.signal,
         })
 

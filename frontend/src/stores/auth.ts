@@ -1,24 +1,21 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+
+export interface SessionUser {
+  id: string
+  username: string
+  permissions: string
+}
 
 interface AuthState {
-  apiKey: string | null
-  setApiKey: (key: string) => void
-  clearApiKey: () => void
+  user: SessionUser | null
+  loading: boolean
+  setUser: (user: SessionUser | null) => void
+  setLoading: (loading: boolean) => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      apiKey: null,
-      setApiKey: (key) => set({ apiKey: key }),
-      clearApiKey: () => set({ apiKey: null }),
-    }),
-    { name: 'ai-paas-auth' },
-  ),
-)
-
-/** Returns the current API key without subscribing to React updates. */
-export function getApiKey(): string | null {
-  return useAuthStore.getState().apiKey
-}
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  loading: true,
+  setUser: (user) => set({ user, loading: false }),
+  setLoading: (loading) => set({ loading }),
+}))

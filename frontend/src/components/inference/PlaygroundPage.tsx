@@ -13,7 +13,7 @@ export default function PlaygroundPage() {
     queryFn: deploymentsApi.list,
   })
 
-  const [selectedKey, setSelectedKey] = useState('')
+  const [apiKeyOverride, setApiKeyOverride] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -23,7 +23,7 @@ export default function PlaygroundPage() {
   const readyDeployments = deployments?.filter((d) => d.status === 'ready') || []
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || !selectedKey || !selectedModel || streaming) return
+    if (!input.trim() || !selectedModel || streaming) return
 
     const userMessage: ChatMessage = { role: 'user', content: input.trim() }
     const allMessages = [...messages, userMessage]
@@ -35,13 +35,17 @@ export default function PlaygroundPage() {
     abortRef.current = controller
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      }
+      if (apiKeyOverride) {
+        headers.Authorization = `Bearer ${apiKeyOverride}`
+      }
       const response = await fetch(`${API_BASE}/v1/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'text/event-stream',
-          Authorization: `Bearer ${selectedKey}`,
-        },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({
           model: selectedModel,
           messages: allMessages,
@@ -136,7 +140,7 @@ export default function PlaygroundPage() {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [input, selectedKey, selectedModel, messages, streaming])
+  }, [input, apiKeyOverride, selectedModel, messages, streaming])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
@@ -145,9 +149,9 @@ export default function PlaygroundPage() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <input
           type="password"
-          value={selectedKey}
-          onChange={(e) => setSelectedKey(e.target.value)}
-          placeholder="Paste API key (sk-...)"
+          value={apiKeyOverride}
+          onChange={(e) => setApiKeyOverride(e.target.value)}
+          placeholder="API key override (optional)"
           style={{
             padding: '8px 12px',
             border: '1px solid #d1d5db',
@@ -205,7 +209,7 @@ export default function PlaygroundPage() {
       >
         {messages.length === 0 && (
           <p style={{ color: '#9ca3af', textAlign: 'center', paddingTop: 40 }}>
-            Select an API key and model, then start chatting.
+            Select a model and start chatting. Session auth is used by default.
           </p>
         )}
         {messages.map((msg, msgIndex) => (
@@ -262,7 +266,7 @@ export default function PlaygroundPage() {
         />
         <button
           type="submit"
-          disabled={streaming || !selectedKey || !selectedModel}
+          disabled={streaming || !selectedModel}
           style={{
             padding: '10px 24px',
             backgroundColor: streaming ? '#9ca3af' : '#2563eb',

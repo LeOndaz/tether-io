@@ -23,6 +23,10 @@ services:
       - CLUSTER_TOPIC=ai-paas-cluster-v1
       - RATE_LIMIT_REQUESTS_PER_MIN=60
       - RATE_LIMIT_TOKENS_PER_HOUR=100000
+      - SESSION_SECRET=change-me-to-a-very-long-secret-phrase-at-least-32-chars
+      - SESSION_SALT=aipaas-salt-16ch
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin
     # Bind-mount source for hot reload via tsx --watch
     command: ["pnpm", "run", "dev"]
     volumes:

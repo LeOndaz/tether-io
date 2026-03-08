@@ -1,5 +1,6 @@
 import fastifySSE from '@fastify/sse'
 import Fastify from 'fastify'
+import { createAuthRoutes } from './auth/routes'
 import { createDeploymentRoutes } from './deployments/routes'
 import { container } from './di/index'
 import { healthRoutes } from './health/routes'
@@ -8,6 +9,7 @@ import { createKeyRoutes } from './keys/routes'
 import { createMetricsRoutes } from './metrics/routes'
 import { createCorsPlugin } from './shared/plugins/cors'
 import { errorHandlerPlugin } from './shared/plugins/error-handler'
+import { createSecureSessionPlugin } from './shared/plugins/secure-session'
 import { createSwaggerPlugin } from './shared/plugins/swagger'
 import { createTestRoutes } from './testing/routes'
 import { createWorkerRoutes } from './workers/routes'
@@ -20,7 +22,9 @@ const {
   keyService,
   deploymentService,
   metricsService,
-  authMiddleware,
+  compositeAuth,
+  sessionAuth,
+  userService,
 } = container
 
 const fastify = Fastify({
@@ -33,17 +37,19 @@ const fastify = Fastify({
 await fastify.register(createCorsPlugin(config))
 await fastify.register(errorHandlerPlugin)
 await fastify.register(fastifySSE)
+await fastify.register(createSecureSessionPlugin(config.session))
 await fastify.register(createSwaggerPlugin(config))
 
 // Register routes — services injected from container
 await fastify.register(healthRoutes)
-await fastify.register(createKeyRoutes(keyService))
-await fastify.register(createDeploymentRoutes(deploymentService, authMiddleware))
+await fastify.register(createAuthRoutes(userService))
+await fastify.register(createKeyRoutes(keyService, sessionAuth))
+await fastify.register(createDeploymentRoutes(deploymentService, compositeAuth))
 await fastify.register(
-  createInferenceRoutes(dispatcher, metricsService, deploymentService, authMiddleware),
+  createInferenceRoutes(dispatcher, metricsService, deploymentService, compositeAuth),
 )
-await fastify.register(createMetricsRoutes(metricsService, dispatcher))
-await fastify.register(createWorkerRoutes(dispatcher))
+await fastify.register(createMetricsRoutes(metricsService, dispatcher, sessionAuth))
+await fastify.register(createWorkerRoutes(dispatcher, sessionAuth))
 
 // Test-only routes — never registered in production
 if (process.env.NODE_ENV === 'test') {

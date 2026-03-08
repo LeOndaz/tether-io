@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError, ValidationError } from '../shared/errors'
 import type { DeploymentService } from './service'
 
@@ -42,7 +43,7 @@ const IdParams = Type.Object({
 
 export function createDeploymentRoutes(
   deploymentService: DeploymentService,
-  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
+  authMiddleware: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function deploymentRoutes(fastify) {
     fastify.post<{ Body: Static<typeof CreateDeploymentBody> }>(
