@@ -34,6 +34,7 @@ export interface AppConfig {
   dhtBootstrapNodes: DhtBootstrapNode[] | undefined
   clusterTopic: string
   frontendUrl: string | null
+  workerSecret: string
 }
 
 export function parseDhtBootstrap(raw: string | null): DhtBootstrapNode[] | undefined {
@@ -80,5 +81,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     dhtBootstrapNodes: parseDhtBootstrap(dhtBootstrap),
     clusterTopic: parsed.CLUSTER_TOPIC ?? DEFAULT_CLUSTER_TOPIC,
     frontendUrl: parsed.FRONTEND_URL ?? null,
+    workerSecret: parsed.WORKER_SECRET ?? '',
   }
 }

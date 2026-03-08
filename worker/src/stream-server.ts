@@ -54,6 +54,7 @@ export async function createStreamServer(
   port: number,
   advertisedHost: string,
   logger: Logger,
+  workerSecret = '',
 ): Promise<{ server: ReturnType<typeof Fastify>; url: string; shutdown: () => Promise<void> }> {
   const fastify = Fastify({
     logger: false,
@@ -61,6 +62,17 @@ export async function createStreamServer(
   })
 
   await fastify.register(fastifySSE)
+
+  // Shared-secret auth for /stream/* routes (skip /health)
+  if (workerSecret) {
+    fastify.addHook('onRequest', async (request, reply) => {
+      if (request.url === '/health') return
+      const provided = request.headers['x-worker-secret']
+      if (provided !== workerSecret) {
+        reply.code(403).send({ error: 'Forbidden' })
+      }
+    })
+  }
 
   fastify.post<{ Body: StreamChatBodyType }>(
     '/stream/chat',

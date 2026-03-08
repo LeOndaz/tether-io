@@ -24,6 +24,7 @@ export const GatewayEnvSchema = Type.Object({
   DHT_BOOTSTRAP: Type.Optional(Type.String()),
   CLUSTER_TOPIC: Type.Optional(Type.String()),
   FRONTEND_URL: Type.Optional(Type.String()),
+  WORKER_SECRET: Type.Optional(Type.String()),
 })
 
 export type GatewayEnv = Static<typeof GatewayEnvSchema>

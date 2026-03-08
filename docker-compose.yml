@@ -23,10 +23,12 @@ services:
       - CLUSTER_TOPIC=ai-paas-cluster-v1
       - RATE_LIMIT_REQUESTS_PER_MIN=60
       - RATE_LIMIT_TOKENS_PER_HOUR=100000
+      # IMPORTANT: Change these values for production. See .env.example.
       - SESSION_SECRET=change-me-to-a-very-long-secret-phrase-at-least-32-chars
       - SESSION_SALT=aipaas-salt-16ch
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin
+      - WORKER_SECRET=dev-worker-secret-change-me
     # Bind-mount source for hot reload via tsx --watch
     command: ["pnpm", "run", "dev"]
     volumes:
@@ -47,6 +49,7 @@ services:
       - DHT_BOOTSTRAP=dht-bootstrap:49737
       - WORKER_STREAM_PORT=8080
       - WORKER_STREAM_HOST=worker-1
+      - WORKER_SECRET=dev-worker-secret-change-me
       - LOG_LEVEL=info
     # Bind-mount source for hot reload via tsx --watch
     command: ["pnpm", "run", "dev"]
@@ -68,6 +71,7 @@ services:
       - DHT_BOOTSTRAP=dht-bootstrap:49737
       - WORKER_STREAM_PORT=8080
       - WORKER_STREAM_HOST=worker-2
+      - WORKER_SECRET=dev-worker-secret-change-me
       - LOG_LEVEL=info
     # Bind-mount source for hot reload via tsx --watch
     command: ["pnpm", "run", "dev"]

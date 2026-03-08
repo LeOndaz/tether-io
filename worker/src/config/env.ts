@@ -14,6 +14,7 @@ export const WorkerEnvSchema = Type.Object({
   DHT_BOOTSTRAP: Type.Optional(Type.String()),
   WORKER_STREAM_PORT: Type.Optional(Type.String()),
   WORKER_STREAM_HOST: Type.Optional(Type.String()),
+  WORKER_SECRET: Type.Optional(Type.String()),
   LOG_LEVEL: Type.Optional(Type.String()),
   NODE_ENV: Type.Optional(Type.String()),
 })

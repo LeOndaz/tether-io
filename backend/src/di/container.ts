@@ -62,7 +62,12 @@ export class Container {
     this.dbReplicator = new DbReplicator(this.dbCore, this.dht, this.logger)
 
     this.keyService = new KeyService(this.db)
-    this.deploymentService = new DeploymentService(this.db, this.dispatcher, this.logger)
+    this.deploymentService = new DeploymentService(
+      this.db,
+      this.dispatcher,
+      this.logger,
+      this.config.workerSecret,
+    )
     this.metricsService = new MetricsService(this.db)
 
     // Auth providers — composable, injectable, replaceable

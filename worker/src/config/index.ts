@@ -1,5 +1,8 @@
 import crypto from 'node:crypto'
+import pino from 'pino'
 import { parseWorkerEnv } from './env'
+
+const logger = pino({ name: 'worker-config' })
 
 // Must match gateway's default — both sides join the same Hyperswarm topic
 const DEFAULT_CLUSTER_TOPIC = 'ai-paas-cluster-v1'
@@ -19,6 +22,7 @@ export interface WorkerConfig {
   dhtBootstrapNodes: DhtBootstrapNode[] | undefined
   streamPort: number
   streamHost: string
+  workerSecret: string
   logLevel: string
 }
 
@@ -47,12 +51,12 @@ export function loadWorkerConfig(
   const streamHost = parsed.WORKER_STREAM_HOST ?? 'localhost'
 
   if (!parsed.OLLAMA_URL) {
-    console.warn(
+    logger.warn(
       'OLLAMA_URL not set — defaulting to http://localhost:11434 (unreachable inside Docker)',
     )
   }
   if (!parsed.WORKER_STREAM_HOST) {
-    console.warn(
+    logger.warn(
       'WORKER_STREAM_HOST not set — defaulting to localhost (stream URL unreachable from other containers)',
     )
   }
@@ -70,6 +74,7 @@ export function loadWorkerConfig(
     dhtBootstrapNodes: parseDhtBootstrap(dhtBootstrap),
     streamPort,
     streamHost,
+    workerSecret: parsed.WORKER_SECRET ?? '',
     logLevel: parsed.LOG_LEVEL ?? 'info',
   }
 }
