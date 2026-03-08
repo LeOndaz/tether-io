@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -41,11 +41,12 @@
       "namespace": "aipaas",
       "id": 2,
       "type": 1,
-      "version": 1,
+      "version": 2,
       "versionField": null,
       "indexes": [
         "@aipaas/usageRecords-by-keyId",
-        "@aipaas/usageRecords-by-model"
+        "@aipaas/usageRecords-by-model",
+        "@aipaas/usageRecords-by-timestamp"
       ],
       "schema": "@aipaas/usageRecord",
       "derived": false,
@@ -104,6 +105,19 @@
       "deprecated": false,
       "key": [
         "model"
+      ]
+    },
+    {
+      "name": "usageRecords-by-timestamp",
+      "namespace": "aipaas",
+      "id": 7,
+      "type": 2,
+      "version": 2,
+      "collection": "@aipaas/usageRecords",
+      "unique": false,
+      "deprecated": false,
+      "key": [
+        "timestamp"
       ]
     }
   ]
