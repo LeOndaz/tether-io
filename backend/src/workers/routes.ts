@@ -3,39 +3,11 @@ import { Type } from 'typebox'
 import type { AuthMiddleware } from '../auth/types'
 import type { Dispatcher } from './dispatcher'
 
-const WorkerInfo = Type.Object({
-  workerId: Type.String(),
-  publicKey: Type.String(),
-  healthy: Type.Boolean(),
-  activeJobs: Type.Number(),
-  streamUrl: Type.Union([Type.String(), Type.Null()]),
-  loadedModels: Type.Array(Type.String()),
-  lastHealthCheck: Type.Number(),
-})
-
 export function createWorkerRoutes(
   dispatcher: Dispatcher,
   sessionAuth: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function workerRoutes(fastify) {
-    fastify.get(
-      '/internal/workers',
-      {
-        preHandler: [sessionAuth],
-        schema: {
-          tags: ['Internal'],
-          description: 'List all known workers and their status',
-          security: [{ cookieAuth: [] }],
-          response: {
-            200: Type.Object({ workers: Type.Array(WorkerInfo) }),
-          },
-        },
-      },
-      async () => {
-        return { workers: dispatcher.getWorkers() }
-      },
-    )
-
     fastify.get(
       '/internal/workers/health-check',
       {
