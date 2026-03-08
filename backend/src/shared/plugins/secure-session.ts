@@ -1,13 +1,9 @@
 import secureSession from '@fastify/secure-session'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
+import type { SessionConfig } from '../../config/index'
 
-export interface SessionPluginConfig {
-  secret: string
-  salt: string
-}
-
-export function createSecureSessionPlugin(config: SessionPluginConfig) {
+export function createSecureSessionPlugin(config: SessionConfig) {
   return fp(async (fastify: FastifyInstance): Promise<void> => {
     await fastify.register(secureSession, {
       secret: config.secret,
