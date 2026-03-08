@@ -4,7 +4,7 @@ import { DbReplica } from './db/replica'
 import { WorkerAnnouncer } from './discovery'
 import pino from 'pino'
 import { createRpcServer } from './rpc-server'
-import { createRuntime } from './runtime/factory'
+import { OllamaRuntime } from './runtime/ollama'
 import { createStreamServer } from './stream-server'
 
 async function main() {
@@ -13,7 +13,7 @@ async function main() {
 
   logger.info({ workerId: config.workerId }, 'starting worker')
 
-  const runtime = createRuntime(config)
+  const runtime = new OllamaRuntime(config)
 
   const healthy = await runtime.isHealthy()
   if (!healthy) {
