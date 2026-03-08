@@ -79,6 +79,7 @@ export class ApiKeyAuthProvider implements AuthProvider {
     }
   }
 
+  // unused — kept for future key deletion cache invalidation
   evictKey(keyId: string): void {
     this.limiterCache.delete(keyId)
   }

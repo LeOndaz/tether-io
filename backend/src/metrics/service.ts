@@ -81,11 +81,13 @@ export class MetricsService {
     return stream.toArray() as Promise<UsageRecord[]>
   }
 
+  // unused — kept for future per-model usage queries
   async getUsageByModel(model: string): Promise<UsageRecord[]> {
     const stream = this.db.find(USAGE_BY_MODEL_INDEX, { model })
     return stream.toArray() as Promise<UsageRecord[]>
   }
 
+  // unused — kept for future full-scan queries
   async getAllUsage(): Promise<UsageRecord[]> {
     const stream = this.db.find(USAGE_RECORDS_COLLECTION, {})
     return stream.toArray() as Promise<UsageRecord[]>

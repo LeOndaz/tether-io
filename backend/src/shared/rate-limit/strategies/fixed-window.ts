@@ -1,3 +1,4 @@
+// unused — kept as alternative strategy implementation
 import type { RateLimitCheckResult, RateLimitStrategy } from '../limiter'
 
 interface FixedWindowConfig {

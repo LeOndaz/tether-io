@@ -1,3 +1,4 @@
+// unused — kept as alternative strategy implementation
 import type { LBStrategy, WorkerInfo } from '../dispatcher'
 
 export class RoundRobinStrategy implements LBStrategy {
