@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { keysApi } from '../../api/client'
 import { useKeysStore } from '../../stores/keys'
 
@@ -37,10 +37,19 @@ export default function ApiKeysPage() {
     },
   })
 
+  const createGuard = useRef(false)
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
-    createMutation.mutate({ name: name.trim() })
+    if (!name.trim() || createGuard.current) return
+    createGuard.current = true
+    createMutation.mutate(
+      { name: name.trim() },
+      {
+        onSettled: () => {
+          createGuard.current = false
+        },
+      },
+    )
   }
 
   const handleCopy = async () => {

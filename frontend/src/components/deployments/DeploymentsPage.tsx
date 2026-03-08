@@ -291,10 +291,19 @@ export default function DeploymentsPage() {
     },
   })
 
+  const deployGuard = useRef(false)
   const handleDeploy = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!model.trim()) return
-    createMutation.mutate({ model: model.trim(), verbose })
+    if (!model.trim() || deployGuard.current) return
+    deployGuard.current = true
+    createMutation.mutate(
+      { model: model.trim(), verbose },
+      {
+        onSettled: () => {
+          deployGuard.current = false
+        },
+      },
+    )
   }
 
   return (
