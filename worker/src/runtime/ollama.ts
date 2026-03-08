@@ -6,16 +6,15 @@ import type {
   ChatResponse,
   ModelInfo,
   ModelMetadata,
+  ModelRuntime,
   PullProgress,
 } from './interface'
-import { ModelRuntime } from './interface'
 
-export class OllamaRuntime extends ModelRuntime {
+export class OllamaRuntime implements ModelRuntime {
   private client: Ollama
   private ollamaUrl: string
 
   constructor(config: WorkerConfig) {
-    super()
     this.ollamaUrl = config.ollamaUrl
     this.client = new Ollama({ host: config.ollamaUrl })
   }
