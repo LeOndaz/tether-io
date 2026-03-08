@@ -79,6 +79,10 @@ export class ApiKeyAuthProvider implements AuthProvider {
     }
   }
 
+  evictKey(keyId: string): void {
+    this.limiterCache.delete(keyId)
+  }
+
   private getLimiter(key: ApiKeyRecord): CompositeRateLimiter {
     if (
       key.rateLimitRequestsPerMin === this.defaultRateLimit.requestsPerMin &&

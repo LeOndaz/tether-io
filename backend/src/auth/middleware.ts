@@ -1,3 +1,4 @@
+import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthError } from '../shared/errors'
 import type { AuthMiddleware, AuthProvider } from './types'
 
@@ -12,6 +13,17 @@ export function createCompositeAuth(providers: AuthProvider[]): AuthMiddleware {
       }
     }
     throw new AuthError('Authentication required')
+  }
+}
+
+/** Require that the authenticated principal has the given permission. */
+export function createPermissionGuard(
+  requiredPermission: string,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  return async (request, _reply) => {
+    if (request.principal?.permissions !== requiredPermission) {
+      throw new AuthError('Insufficient permissions')
+    }
   }
 }
 

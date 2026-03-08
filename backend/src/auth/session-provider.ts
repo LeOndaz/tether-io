@@ -9,7 +9,7 @@ export class SessionAuthProvider implements AuthProvider {
     return {
       type: 'session',
       id: userId,
-      permissions: request.session.get('permissions') ?? 'admin',
+      permissions: request.session.get('permissions') ?? 'inference',
     }
   }
 }

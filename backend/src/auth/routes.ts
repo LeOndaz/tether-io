@@ -20,6 +20,22 @@ export function createAuthRoutes(
   userService: UserService,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function authRoutes(fastify) {
+    // In-memory login rate limiter: 5 attempts per 60s per IP
+    const LOGIN_WINDOW_MS = 60_000
+    const LOGIN_MAX_ATTEMPTS = 5
+    const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [ip, entry] of loginAttempts) {
+        if (entry.resetAt <= now) loginAttempts.delete(ip)
+      }
+    }, 60_000)
+
+    fastify.addHook('onClose', () => {
+      clearInterval(cleanupInterval)
+    })
+
     fastify.post<{ Body: Static<typeof LoginBody> }>(
       '/auth/login',
       {
@@ -31,6 +47,23 @@ export function createAuthRoutes(
         },
       },
       async (request, reply: FastifyReply) => {
+        const ip = request.ip
+        const now = Date.now()
+        const entry = loginAttempts.get(ip)
+
+        if (entry && entry.resetAt > now) {
+          if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+            const retryAfter = Math.ceil((entry.resetAt - now) / 1000)
+            reply.header('Retry-After', retryAfter)
+            return reply.status(429).send({
+              error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many login attempts' },
+            })
+          }
+          entry.count++
+        } else {
+          loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+        }
+
         const { username, password } = request.body
         const user = await userService.validateCredentials(username, password)
         if (!user) throw new AuthError('Invalid username or password')

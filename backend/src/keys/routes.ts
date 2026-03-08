@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
+import { createPermissionGuard } from '../auth/middleware'
 import type { AuthMiddleware } from '../auth/types'
 import { NotFoundError } from '../shared/errors'
 import type { KeyService } from './service'
@@ -41,11 +42,13 @@ export function createKeyRoutes(
   sessionAuth: AuthMiddleware,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function keyRoutes(fastify) {
+    const adminGuard = createPermissionGuard('admin')
+
     fastify.post<{ Body: Static<typeof CreateKeyBody> }>(
       '/api/keys',
       {
         onRequest: fastify.csrfProtection,
-        preHandler: [sessionAuth],
+        preHandler: [sessionAuth, adminGuard],
         schema: {
           tags: ['API Keys'],
           description: 'Create a new API key. The full key is returned only once.',
@@ -140,7 +143,7 @@ export function createKeyRoutes(
       '/api/keys/:id',
       {
         onRequest: fastify.csrfProtection,
-        preHandler: [sessionAuth],
+        preHandler: [sessionAuth, adminGuard],
         schema: {
           tags: ['API Keys'],
           params: IdParams,
