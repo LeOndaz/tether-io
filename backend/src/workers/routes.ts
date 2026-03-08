@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { Type } from 'typebox'
 import type { Dispatcher } from './dispatcher'
 
@@ -14,17 +14,14 @@ const WorkerInfo = Type.Object({
 
 export function createWorkerRoutes(
   dispatcher: Dispatcher,
-  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
 ): (fastify: FastifyInstance) => Promise<void> {
   return async function workerRoutes(fastify) {
     fastify.get(
       '/internal/workers',
       {
-        preHandler: [authMiddleware],
         schema: {
           tags: ['Internal'],
           description: 'List all known workers and their status',
-          security: [{ bearerAuth: [] }],
           response: {
             200: Type.Object({ workers: Type.Array(WorkerInfo) }),
           },
@@ -38,11 +35,9 @@ export function createWorkerRoutes(
     fastify.get(
       '/internal/workers/health-check',
       {
-        preHandler: [authMiddleware],
         schema: {
           tags: ['Internal'],
           description: 'Test RPC connectivity to all workers',
-          security: [{ bearerAuth: [] }],
           response: {
             200: Type.Object({
               results: Type.Array(

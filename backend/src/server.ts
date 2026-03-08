@@ -37,13 +37,13 @@ await fastify.register(createSwaggerPlugin(config))
 
 // Register routes — services injected from container
 await fastify.register(healthRoutes)
-await fastify.register(createKeyRoutes(keyService, authMiddleware))
+await fastify.register(createKeyRoutes(keyService))
 await fastify.register(createDeploymentRoutes(deploymentService, authMiddleware))
 await fastify.register(
   createInferenceRoutes(dispatcher, metricsService, deploymentService, authMiddleware),
 )
 await fastify.register(createMetricsRoutes(metricsService, dispatcher))
-await fastify.register(createWorkerRoutes(dispatcher, authMiddleware))
+await fastify.register(createWorkerRoutes(dispatcher))
 
 // Test-only routes — never registered in production
 if (process.env.NODE_ENV === 'test') {
