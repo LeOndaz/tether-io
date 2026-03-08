@@ -2,14 +2,14 @@ import DHT from 'hyperdht'
 import { loadWorkerConfig } from './config'
 import { DbReplica } from './db/replica'
 import { WorkerAnnouncer } from './discovery'
-import { createLogger } from './logger'
+import pino from 'pino'
 import { createRpcServer } from './rpc-server'
 import { createRuntime } from './runtime/factory'
 import { createStreamServer } from './stream-server'
 
 async function main() {
   const config = loadWorkerConfig()
-  const logger = createLogger(config.logLevel)
+  const logger = pino({ level: config.logLevel })
 
   logger.info({ workerId: config.workerId }, 'starting worker')
 
@@ -99,7 +99,7 @@ async function main() {
 }
 
 main().catch((err: unknown) => {
-  const logger = createLogger('error')
+  const logger = pino({ level: 'error' })
   logger.fatal({ err }, 'worker fatal error')
   process.exit(1)
 })

@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import fastifySSE from '@fastify/sse'
 import Fastify from 'fastify'
 import { type Static, Type } from 'typebox'
-import type { Logger } from './logger'
+import type pino from 'pino'
 import type { ModelRuntime } from './runtime/interface'
 
 const StreamChatBody = Type.Object({
@@ -53,7 +53,7 @@ export async function createStreamServer(
   runtime: ModelRuntime,
   port: number,
   advertisedHost: string,
-  logger: Logger,
+  logger: pino.Logger,
   workerSecret = '',
 ): Promise<{ server: ReturnType<typeof Fastify>; url: string; shutdown: () => Promise<void> }> {
   const fastify = Fastify({

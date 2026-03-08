@@ -1,12 +1,12 @@
 import RPC from '@hyperswarm/rpc'
 import DHT from 'hyperdht'
 import type { WorkerConfig } from './config'
-import type { Logger } from './logger'
+import type pino from 'pino'
 import type { ModelRuntime } from './runtime/interface'
 
 interface RpcBootstrapOptions {
   bootstrap?: Array<{ host: string; port: number }>
-  logger: Logger
+  logger: pino.Logger
   dht?: DHT
 }
 

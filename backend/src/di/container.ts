@@ -1,7 +1,7 @@
 import type Hypercore from 'hypercore'
 import type { HyperDB } from 'hyperdb'
 import type DHT from 'hyperdht'
-import type pino from 'pino'
+import pino from 'pino'
 import { ApiKeyAuthProvider } from '../auth/api-key-provider'
 import { createCompositeAuth, createProviderAuth } from '../auth/middleware'
 import { SessionAuthProvider } from '../auth/session-provider'
@@ -13,7 +13,6 @@ import { createDatabase } from '../db/index'
 import { DbReplicator } from '../db/replicator'
 import { DeploymentService } from '../deployments/service'
 import { KeyService } from '../keys/service'
-import { createLogger } from '../logger'
 import { MetricsService } from '../metrics/service'
 import { WorkerDiscovery } from '../workers/discovery'
 import { createDHT, createDispatcher } from '../workers/dispatcher'
@@ -39,7 +38,7 @@ export class Container {
 
   async init(): Promise<void> {
     this.config = loadConfig()
-    this.logger = createLogger(this.config.logLevel)
+    this.logger = pino({ level: this.config.logLevel })
 
     this.logger.info('initializing container...')
 

@@ -1,7 +1,7 @@
 import type DHT from 'hyperdht'
 import Hyperswarm from 'hyperswarm'
 import type { SwarmConnection } from 'hyperswarm'
-import type { Logger } from './logger'
+import type pino from 'pino'
 
 interface AnnounceIdentity {
   workerId: string
@@ -32,7 +32,7 @@ export class WorkerAnnouncer {
   constructor(
     private identity: AnnounceIdentity,
     private config: AnnounceConfig,
-    private logger: Logger,
+    private logger: pino.Logger,
     private onDbKeyReceived?: (dbKeyHex: string) => void,
   ) {}
 
