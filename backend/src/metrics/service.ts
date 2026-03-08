@@ -1,11 +1,10 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import {
-  USAGE_BY_KEY_ID_INDEX,
-  USAGE_BY_MODEL_INDEX,
-  USAGE_BY_TIMESTAMP_INDEX,
-  USAGE_RECORDS_COLLECTION,
-} from './schema'
+
+const USAGE_RECORDS_COLLECTION = '@aipaas/usageRecords' as const
+const USAGE_BY_KEY_ID_INDEX = '@aipaas/usageRecords-by-keyId' as const
+const USAGE_BY_MODEL_INDEX = '@aipaas/usageRecords-by-model' as const
+const USAGE_BY_TIMESTAMP_INDEX = '@aipaas/usageRecords-by-timestamp' as const
 
 export interface UsageRecord {
   id: string

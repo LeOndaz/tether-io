@@ -3,7 +3,9 @@ import type { HyperDB } from 'hyperdb'
 import type pino from 'pino'
 import { ValidationError } from '../shared/errors'
 import type { Dispatcher } from '../workers/dispatcher'
-import { DEPLOYMENTS_BY_MODEL_INDEX, DEPLOYMENTS_COLLECTION } from './schema'
+
+const DEPLOYMENTS_COLLECTION = '@aipaas/deployments' as const
+const DEPLOYMENTS_BY_MODEL_INDEX = '@aipaas/deployments-by-model' as const
 
 export type DeploymentStatus = 'pending' | 'pulling' | 'ready' | 'failed' | 'removing'
 

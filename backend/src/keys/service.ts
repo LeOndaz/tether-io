@@ -1,6 +1,8 @@
 import crypto from 'node:crypto'
 import type { HyperDB } from 'hyperdb'
-import { KEYS_BY_HASH_INDEX, KEYS_COLLECTION } from './schema'
+
+const KEYS_COLLECTION = '@aipaas/apiKeys' as const
+const KEYS_BY_HASH_INDEX = '@aipaas/apiKeys-by-hash' as const
 
 function hashKey(apiKey: string): string {
   return crypto.createHash('sha256').update(apiKey).digest('hex')
