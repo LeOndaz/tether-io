@@ -12,7 +12,8 @@ COPY . .
 
 RUN pnpm build
 
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser \
+RUN mkdir -p /app/storage && \
+    addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser \
     && chown -R appuser:appgroup /app
 USER appuser
 
