@@ -8,7 +8,7 @@ import type { DeploymentService } from './service'
 
 const CreateDeploymentBody = Type.Object(
   {
-    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:\\-/]{1,128}$' }),
+    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:/\\-]{1,128}$' }),
     verbose: Type.Optional(Type.Boolean({ default: false })),
     contextWindow: Type.Optional(Type.Integer({ minimum: 512 })),
     temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),

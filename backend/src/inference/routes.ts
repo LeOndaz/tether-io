@@ -24,7 +24,7 @@ const ChatMessage = Type.Object({
 
 const ChatCompletionsBody = Type.Object(
   {
-    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:\\\\-/]{1,128}$' }),
+    model: Type.String({ minLength: 1, pattern: '^[a-zA-Z0-9._:/\\-]{1,128}$' }),
     messages: Type.Array(ChatMessage, { minItems: 1, maxItems: 256 }),
     stream: Type.Optional(Type.Boolean({ default: false })),
     temperature: Type.Optional(Type.Number({ minimum: 0, maximum: 2 })),
