@@ -22,6 +22,12 @@ export function createSwaggerPlugin(config: AppConfig) {
               scheme: 'bearer',
               description: 'API key (sk-...)',
             },
+            cookieAuth: {
+              type: 'apiKey',
+              in: 'cookie',
+              name: 'session',
+              description: 'Session cookie (login via /auth/login)',
+            },
           },
         },
       },
